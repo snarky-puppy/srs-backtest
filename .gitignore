@@ -23,3 +23,6 @@ go.work
 .idea
 token.json
 *.log
+
+data/peak-profits
+data/pp

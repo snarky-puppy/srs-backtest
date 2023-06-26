@@ -2,6 +2,8 @@ package pp
 
 import (
 	"fmt"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/go-echarts/go-echarts/v2/opts"
@@ -52,6 +54,9 @@ type Trade struct {
 	BarCnt                  int     // number of bars this trade was open
 	StopLog                 []*StopLog
 	CloseReason             string
+	Loser                   float64 // the Loser score
+	MaxLoser                float64 // the highest loser score during this trade
+	Signal                  *Signal // the originating signal
 }
 
 func (t *Trade) Profit() float64 {
@@ -96,4 +101,95 @@ func (t *Trade) PlotStopLine(bars Series) (stopLine []opts.KlineData) {
 		}
 	}
 	return
+}
+
+func (t *Trade) UpdateLoserScore(l float64) {
+	t.Loser += l
+	t.MaxLoser = math.Max(t.MaxLoser, t.Loser)
+}
+
+func (t *Trade) IsLoser() bool {
+	return t.Loser >= 5
+}
+
+func (t *Trade) ResetLoserStatus() {
+	t.Loser = 0
+}
+
+func (t *Trade) IsLoserStopMsg() string {
+	if t.IsLoser() {
+		return " (loser)"
+	}
+	return ""
+}
+
+func (t *Trade) TradeCloseMsg(raison string) string {
+	raisons := []string{}
+	if t.IsLoser() {
+		raisons = append(raisons, "loser")
+	}
+
+	if len(raisons) > 0 {
+		return fmt.Sprintf("%s (%s)", raison, strings.Join(raisons, ","))
+	}
+	return raison
+}
+
+func (t *Trade) CheckLoser(bar *Bar) {
+	/*
+		1. Close losing trades early: if the trade is in loss for too long, 3-5 bars in, close the trade
+			 (dubbed "sunken" - bar's high is still a loss)
+			- long: the high is under the trigger for 3 bars -- close
+			- short: the low is over the trigger for 3 bars -- close
+		or
+			(dubbed "straddle")
+			- long: high above and low below the trigger for 4 consecutive -- close
+			- short: low below and high above the trigger for 4 consecutive -- close
+		or
+			(dubbed modified straddle)
+			- straddle for 3 then move out -- set stop to break even
+		or
+			- long: straddle for 3 then high below the trigger for 1 -- close
+			- short: straddle for 3 then low above the trigger for 1 -- close
+
+		Loser score:
+		  + 1.5 for every bar high is under trigger
+		  + 1   for every bar straddle
+		  ** RESET score when 5 min bar clears the trigger (long: low > trigger, short: high < trigger)
+	*/
+	isStraddle := bar.High > t.Open && bar.Low < t.Open
+	isSunken := false
+	switch t.Direction {
+	case Long:
+		isSunken = bar.High < t.Open
+	case Short:
+		isSunken = bar.Low > t.Open
+	}
+
+	if isSunken && isStraddle {
+		panic("failed sanity check: isSunken && isStraddle")
+	}
+
+	switch {
+	case isSunken:
+		t.UpdateLoserScore(1.5)
+	case isStraddle:
+		t.UpdateLoserScore(1)
+	default:
+		// Once the trade is a loser, it can't be recovered because the stop/break even trades are already submitted
+		if !t.IsLoser() /* || LoserCanRecover */ {
+			t.ResetLoserStatus()
+		}
+	}
+
+	if t.IsLoser() {
+		switch t.Direction {
+		case Long:
+			t.Target = t.Open
+			t.Stop = bar.Low + 3
+		case Short:
+			t.Target = t.Open
+			t.Stop = bar.High + 3
+		}
+	}
 }

@@ -12,8 +12,9 @@ import (
 
 type Signal struct {
 	// the 15 minute bar
-	Bar *Bar
-	Idx int // first bar of the 3 signal bars
+	Bar         *Bar
+	BarDuration time.Duration
+	Idx         int // first bar of the 3 signal bars
 
 	Trades []*Trade
 }
@@ -32,6 +33,11 @@ func (s Signal) CanTrade() bool {
 	return len(s.Trades) < 3
 }
 
+func (s Signal) EndsAt() time.Time {
+	// subtract the 5 minute duration of the starting bar or we end up with too big a end time
+	return s.Bar.Timestamp.Add(s.BarDuration - (5 * time.Minute))
+}
+
 type Bar struct {
 	Timestamp time.Time
 	Open      float64
@@ -40,8 +46,29 @@ type Bar struct {
 	Close     float64
 }
 
-func (b Bar) MarketCloseBar() bool {
+func (b *Bar) MarketCloseBar() bool {
 	return b.Timestamp.Hour() == 17 && b.Timestamp.Minute() == 25
+}
+
+// Copy the bar
+func (b *Bar) Copy() *Bar {
+	return &Bar{
+		Timestamp: b.Timestamp,
+		Open:      b.Open,
+		High:      b.High,
+		Low:       b.Low,
+		Close:     b.Close,
+	}
+}
+
+func (b *Bar) Add(b2 *Bar) {
+	if b2.High > b.High {
+		b.High = b2.High
+	}
+	if b2.Low < b.Low {
+		b.Low = b2.Low
+	}
+	b.Close = b2.Close
 }
 
 type Series []*Bar
