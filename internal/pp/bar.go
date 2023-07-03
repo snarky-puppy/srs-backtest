@@ -16,7 +16,8 @@ type Signal struct {
 	BarDuration time.Duration
 	Idx         int // first bar of the 3 signal bars
 
-	Trades []*Trade
+	Trades     []*Trade
+	CanTradeFn func(Signal) bool
 }
 
 // High returns higher signal breakout with increasing number of trades
@@ -30,6 +31,9 @@ func (s Signal) Low() float64 {
 }
 
 func (s Signal) CanTrade() bool {
+	if s.CanTradeFn != nil {
+		return s.CanTradeFn(s)
+	}
 	return len(s.Trades) < 3
 }
 
@@ -186,7 +190,7 @@ func (s Series) SignalContext(signal *Signal) (rv Series) {
 			}
 		}
 	} else {
-		end = 20
+		end = start + 40
 	}
 	end += 20
 	if start < 0 {
@@ -196,9 +200,9 @@ func (s Series) SignalContext(signal *Signal) (rv Series) {
 		end = len(s)
 	}
 	for i := start; i < end; i++ {
-		if s[i].MarketCloseBar() && i > ((start+end)/2) {
-			break
-		}
+		//if s[i].MarketCloseBar() && i > ((start+end)/2) {
+		//	break
+		//}
 		rv = append(rv, s[i])
 	}
 	return rv

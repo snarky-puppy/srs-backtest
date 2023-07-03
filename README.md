@@ -1,6 +1,22 @@
 # srs
 SRS backtest
 
+## PL before "add to trade" 
+e8e0d683c2e5d441e70458354993788e948544a5
+
+```
+target hits: 1471, target miss: 1032
+target hits: 0.587695
+no trades: 75
+minute: Monday, winRate: 55 (267/211)
+minute: Tuesday, winRate: 60 (304/200)
+minute: Wednesday, winRate: 58 (296/211)
+minute: Thursday, winRate: 59 (304/209)
+minute: Friday, winRate: 59 (300/201)
+total profit: 2944.500000
+```
+
+## Volatility test
 ```
 08:00 53% (3830/17/3359) $18603 <-- yes, too good, no data pre-8:00, it's a gap from yesterday close
 08:05 55% (3832/20/3058) $2556

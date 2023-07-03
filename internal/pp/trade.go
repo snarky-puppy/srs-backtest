@@ -27,19 +27,46 @@ const (
 	Short
 )
 
+// StopLog tracks the stop price and the bar index at which it was set
 type StopLog struct {
 	Stop      float64
 	Idx       int
 	Timestamp time.Time
 }
 
+func NewTrade(direction Direction, open, stop, target float64, index int, bar *Bar, signal *Signal, reason string) *Trade {
+	return &Trade{
+		Open: open,
+		Stop: stop,
+		StopLog: []*StopLog{{
+			Stop:      stop,
+			Idx:       index,
+			Timestamp: bar.Timestamp,
+		}},
+		Target:    target,
+		Direction: direction,
+		OpenAtBar: bar,
+		OpenAt:    bar.Timestamp,
+		OpenAtIdx: index,
+		High: func() float64 {
+			if direction == Long {
+				return bar.High
+			}
+			return bar.Low
+		}(),
+		Signal:         signal,
+		AutoAdjustStop: false,
+		Reason:         reason,
+	}
+}
+
 type Trade struct {
 	Direction               Direction
 	Stop                    float64
-	StopPoints              float64 // how many points the stop is from the open, always positive
 	Open                    float64
 	OpenAt                  time.Time
 	OpenAtBar               *Bar
+	OpenAtIdx               int
 	Close                   float64
 	CloseAt                 time.Time
 	CloseAtBar              *Bar
@@ -48,15 +75,17 @@ type Trade struct {
 	HighAt                  time.Time
 	HighAfterBars           int     // number of bars after open that the high was reached
 	Target                  float64 // official target
-	TargetAtBars            int     // number of bars after open that the target (30pt) was reached
 	PostTargetHigh          float64 // highest price reached after target was reached
 	PostTargetHighAfterBars int     // number of bars after target that the post target high was reached
 	BarCnt                  int     // number of bars this trade was open
 	StopLog                 []*StopLog
 	CloseReason             string
 	Loser                   float64 // the Loser score
+	DisableLoserCheck       bool    // disable the Loser score (for add-on trades)
 	MaxLoser                float64 // the highest loser score during this trade
 	Signal                  *Signal // the originating signal
+	AutoAdjustStop          bool    // if true, trade management will automatically update this trade's stop
+	Reason                  string
 }
 
 func (t *Trade) Profit() float64 {
@@ -157,6 +186,15 @@ func (t *Trade) CheckLoser(bar *Bar) {
 		  + 1   for every bar straddle
 		  ** RESET score when 5 min bar clears the trigger (long: low > trigger, short: high < trigger)
 	*/
+
+	if t.BarCnt <= 1 { // first bar doesn't count
+		return
+	}
+
+	if t.DisableLoserCheck {
+		return
+	}
+
 	isStraddle := bar.High > t.Open && bar.Low < t.Open
 	isSunken := false
 	switch t.Direction {
@@ -186,10 +224,15 @@ func (t *Trade) CheckLoser(bar *Bar) {
 		switch t.Direction {
 		case Long:
 			t.Target = t.Open
-			t.Stop = bar.Low + 3
+			t.Stop = math.Max(t.Stop, bar.Low+3)
 		case Short:
 			t.Target = t.Open
-			t.Stop = bar.High + 3
+			t.Stop = math.Min(t.Stop, bar.High+3)
 		}
 	}
+}
+
+func (t *Trade) AdjustStop(f float64, i int, bar *Bar) {
+	t.Stop = f
+	t.StopLog = append(t.StopLog, &StopLog{Timestamp: bar.Timestamp, Stop: f, Idx: i})
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/go-echarts/go-echarts/v2/components"
 	"log"
-	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -17,8 +16,9 @@ import (
 )
 
 const (
-	ScanTTL      = time.Hour * 3
-	TargetPoints = 30
+	ScanTTL         = time.Hour * 3
+	TargetPoints    = 20
+	TrailStopPoints = 15
 )
 
 var (
@@ -179,8 +179,22 @@ func (s *Strategy) runTrades() {
 	var (
 		srsSignal   *pp.Signal
 		rangeSignal *pp.Signal
-		trade       *pp.Trade
+		trades      []*pp.Trade
 	)
+
+	closeAll := func(reason string, idx int, bar *pp.Bar) {
+		if len(trades) == 0 {
+			return
+		}
+		for _, trade := range trades {
+			trade.Close = bar.Close
+			trade.CloseAt = bar.Timestamp
+			trade.CloseAtBar = bar
+			trade.CloseAtIdx = idx
+			trade.CloseReason = "end of life"
+		}
+		trades = nil
+	}
 
 	for i, bar := range bars {
 		if i == len(bars)-1 {
@@ -202,22 +216,15 @@ func (s *Strategy) runTrades() {
 		// refactor this
 		if t.Before(MarketOpen(t)) || t.After(MarketClose(t)) {
 			// don't go over closing time
-			if trade != nil {
-				trade.Close = bars[i-1].Close
-				trade.CloseAt = bars[i-1].Timestamp
-				trade.CloseAtBar = bars[i-1]
-				trade.CloseAtIdx = i - 1
-				trade.CloseReason = "end of life"
-				trade = nil
-			}
+			closeAll("market close", i, bar)
 			srsSignal = nil
 			rangeSignal = nil
 			continue
 		}
 
-		if trade != nil {
-			trade = manageTrade(i, trade, bar)
-			if trade != nil {
+		if len(trades) > 0 {
+			trades = manageTrades(i, trades, bar, trades[0].Signal)
+			if trades != nil {
 				continue
 			}
 			continue // don't scan immediately after closing a trade
@@ -254,53 +261,23 @@ func (s *Strategy) runTrades() {
 			if prevBar.High <= high && bar.High > high {
 				entry := high // stop order was set here
 				stopPrice := stop(srsSignal.Bar, pp.Long)
-				stopPoints := math.Abs(entry - stopPrice)
-				trade = &pp.Trade{
-					Open:       entry,
-					Stop:       stopPrice,
-					StopPoints: stopPoints,
-					StopLog: []*pp.StopLog{{
-						Stop:      stopPrice,
-						Idx:       i,
-						Timestamp: t,
-					}},
-					Target:    target(entry, pp.Long),
-					Direction: pp.Long,
-					OpenAtBar: bar,
-					OpenAt:    bar.Timestamp,
-					High:      bar.High,
-					Signal:    srsSignal,
-				}
+				trade := pp.NewTrade(pp.Long, entry, stopPrice, target(entry, pp.Long), i, bar, srsSignal, "srs crossover")
 				srsSignal.Trades = append(srsSignal.Trades, trade)
+				trades = append(trades, trade)
 				continue
 
 			} else if prevBar.Low >= low && bar.Low < low {
 				entry := low // stop order was set here
 				stopPrice := stop(srsSignal.Bar, pp.Short)
-				stopPoints := math.Abs(stopPrice - entry)
-				trade = &pp.Trade{
-					Open:       entry,
-					Stop:       stopPrice,
-					StopPoints: stopPoints,
-					StopLog: []*pp.StopLog{{
-						Stop:      stopPrice,
-						Idx:       i,
-						Timestamp: t,
-					}},
-					Target:    target(entry, pp.Short),
-					Direction: pp.Short,
-					OpenAtBar: bar,
-					OpenAt:    bar.Timestamp,
-					High:      bar.Low,
-					Signal:    srsSignal,
-				}
+				trade := pp.NewTrade(pp.Short, entry, stopPrice, target(entry, pp.Short), i, bar, srsSignal, "srs crossover")
 				srsSignal.Trades = append(srsSignal.Trades, trade)
+				trades = append(trades, trade)
 				continue
 			}
 		}
 
 		// setup range signal
-		if trade == nil && rangeSignal == nil {
+		if len(trades) == 0 && rangeSignal == nil {
 			// detect trading range in last 10 bars
 			idx := i - 10
 			tRange := bars[idx].Copy()
@@ -313,7 +290,14 @@ func (s *Strategy) runTrades() {
 			}
 
 			if tRange.High-tRange.Low <= 20 {
-				rangeSignal = &pp.Signal{Bar: tRange, Idx: idx, BarDuration: 10 * (5 * time.Minute)}
+				rangeSignal = &pp.Signal{
+					Bar:         tRange,
+					Idx:         idx,
+					BarDuration: 10 * (5 * time.Minute),
+					CanTradeFn: func(s pp.Signal) bool {
+						return len(s.Trades) == 0
+					},
+				}
 				s.Signals = append(s.Signals, rangeSignal)
 			}
 		}
@@ -327,61 +311,26 @@ func (s *Strategy) runTrades() {
 			if prevBar.High <= high && bar.High > high {
 				entry := high // stop order was set here
 				stopPrice := stop(rangeSignal.Bar, pp.Long)
-				stopPoints := math.Abs(entry - stopPrice)
-				trade = &pp.Trade{
-					Open:       entry,
-					Stop:       stopPrice,
-					StopPoints: stopPoints,
-					StopLog: []*pp.StopLog{{
-						Stop:      stopPrice,
-						Idx:       i,
-						Timestamp: t,
-					}},
-					Target:    target(entry, pp.Long),
-					Direction: pp.Long,
-					OpenAtBar: bar,
-					OpenAt:    bar.Timestamp,
-					High:      bar.High,
-					Signal:    rangeSignal,
-				}
+				trade := pp.NewTrade(pp.Long, entry, stopPrice, target(entry, pp.Long), i, bar, rangeSignal, "range crossover")
 				rangeSignal.Trades = append(rangeSignal.Trades, trade)
 				rangeSignal = nil // cannot use again
+				trades = append(trades, trade)
 				continue
 
 			} else if prevBar.Low >= low && bar.Low < low {
 				entry := low // stop order was set here
 				stopPrice := stop(rangeSignal.Bar, pp.Short)
-				stopPoints := math.Abs(stopPrice - entry)
-				trade = &pp.Trade{
-					Open:       entry,
-					Stop:       stopPrice,
-					StopPoints: stopPoints,
-					StopLog: []*pp.StopLog{{
-						Stop:      stopPrice,
-						Idx:       i,
-						Timestamp: t,
-					}},
-					Target:    target(entry, pp.Short),
-					Direction: pp.Short,
-					OpenAtBar: bar,
-					OpenAt:    bar.Timestamp,
-					High:      bar.Low,
-					Signal:    rangeSignal,
-				}
+				trade := pp.NewTrade(pp.Short, entry, stopPrice, target(entry, pp.Short), i, bar, rangeSignal, "range crossover")
 				rangeSignal.Trades = append(rangeSignal.Trades, trade)
 				rangeSignal = nil // cannot use again
+				trades = append(trades, trade)
 				continue
 			}
 		}
 	}
 
-	// close last trade
-	if trade != nil {
-		trade.Close = bars[len(bars)-1].Close
-		trade.CloseAt = bars[len(bars)-1].Timestamp
-		trade.CloseAtBar = bars[len(bars)-1]
-		trade.CloseReason = "end of data"
-	}
+	// close final trade
+	closeAll("end of data", len(bars)-1, bars[len(bars)-1])
 }
 
 // IsPeriod returns true if the given time is the end of the 15 minute interval we are using for signals
@@ -392,7 +341,68 @@ func (s *Strategy) IsPeriod(t time.Time) bool {
 	return false
 }
 
-func manageTrade(i int, trade *pp.Trade, bar *pp.Bar) *pp.Trade {
+// plural
+func manageTrades(i int, trades []*pp.Trade, bar *pp.Bar, signal *pp.Signal) (rv []*pp.Trade) {
+
+	// what to do when a trade reaches it's target
+	onTarget := func(winner *pp.Trade) {
+
+		/*
+			What kind of day is it?
+			Volatile?
+			Slow?
+			Trending?
+			Something else?
+			Choppy
+			Range bound
+			Breakout
+			Consolidating
+		*/
+
+		if winner.AutoAdjustStop {
+			return
+		}
+
+		if winner.IsLoser() {
+			return // it means the loser is stopped for 0 or a loss
+		}
+
+		reachedTarget := winner.Target
+		half := 15.0 // float64(TargetPoints / 2)
+		// adjust stop to target / 2
+		switch winner.Direction {
+		case pp.Long:
+			winner.AdjustStop(winner.Target-half, i, bar)
+			winner.Target = winner.Target + half
+		case pp.Short:
+			winner.AdjustStop(winner.Target+half, i, bar)
+			winner.Target = winner.Target - half
+		}
+		winner.AutoAdjustStop = true
+
+		// create a new trade to add to the position
+		newTrade := pp.NewTrade(winner.Direction, reachedTarget, winner.Stop, winner.Target, i, bar, signal, "add to position")
+		newTrade.AutoAdjustStop = true
+		newTrade.DisableLoserCheck = true
+		signal.Trades = append(signal.Trades, newTrade)
+		rv = append(rv, newTrade)
+	}
+
+	for _, trade := range trades {
+		t := manageTrade(i, trade, bar, signal, onTarget)
+		if t != nil {
+			rv = append(rv, t)
+		}
+		if len(rv) > 100 {
+			log.Println("break", len(rv))
+		}
+	}
+
+	return
+}
+
+// singular
+func manageTrade(i int, trade *pp.Trade, bar *pp.Bar, signal *pp.Signal, onTarget func(*pp.Trade)) *pp.Trade {
 	trade.BarCnt++
 
 	closeTrade := func(reason string, price float64) *pp.Trade {
@@ -401,11 +411,12 @@ func manageTrade(i int, trade *pp.Trade, bar *pp.Bar) *pp.Trade {
 		trade.CloseAtBar = bar
 		trade.CloseAtIdx = i
 		trade.CloseReason = trade.TradeCloseMsg(reason)
-		if strings.HasPrefix(reason, "target") {
-			trade.TargetAtBars = trade.BarCnt
-		}
 		return nil
 	}
+
+	//if trade.OpenAtIdx == 804735 {
+	//	log.Println("break")
+	//}
 
 	// region normal stopped out
 	switch {
@@ -416,9 +427,26 @@ func manageTrade(i int, trade *pp.Trade, bar *pp.Bar) *pp.Trade {
 	}
 	// endregion
 
-	if trade.BarCnt > 1 { // first bar doesn't count
-		trade.CheckLoser(bar)
+	// region adjust stops
+	// w/o 80,50
+	// w 75,45
+
+	if trade.AutoAdjustStop {
+		switch trade.Direction {
+		case pp.Long:
+			// trail by 15 pts
+			if bar.Low > trade.Stop+TrailStopPoints {
+				trade.AdjustStop(trade.Stop+TrailStopPoints, i, bar)
+			}
+		case pp.Short:
+			if bar.High < trade.Stop-TrailStopPoints {
+				trade.AdjustStop(trade.Stop-TrailStopPoints, i, bar)
+			}
+		}
 	}
+	// endregion
+
+	trade.CheckLoser(bar)
 
 	/*
 
@@ -448,69 +476,19 @@ func manageTrade(i int, trade *pp.Trade, bar *pp.Bar) *pp.Trade {
 	switch trade.Direction {
 	case pp.Long:
 		if bar.High >= trade.Target {
-			return closeTrade("target", trade.Target-slippage())
+			onTarget(trade)
+			return trade
+			//return closeTrade("target", trade.Target-slippage())
 		}
 	case pp.Short:
 		if bar.Low <= trade.Target {
-			return closeTrade("target", trade.Target+slippage())
+			onTarget(trade)
+			return trade
+			//return closeTrade("target", trade.Target+slippage())
 		}
 	}
 	// endregion target
 
-	/*
-		switch trade.Direction {
-		case pp.Long:
-			// check high
-			if bar.High > trade.High {
-				trade.High = bar.High
-				trade.HighAfterBars = trade.BarCnt
-				trade.HighAt = bar.Timestamp
-			}
-			// adjust stops
-			if bar.High > trade.Open+trade.StopPoints {
-				//trade.Stop = bar.High - trade.StopPoints // move stop up
-				//trade.StopLog = append(trade.StopLog, &srs.StopLog{
-				//	Stop:      trade.Stop,
-				//	Idx:       i,
-				//	Timestamp: bar.Timestamp,
-				//})
-			}
-			// check reached stops
-			if bar.Low <= trade.Stop {
-				return closeTrade("stop", trade.Stop-slippage())
-			}
-			// check reached target
-			if bar.High >= trade.Target {
-				return closeTrade("target", trade.Target-slippage())
-			}
-		case pp.Short:
-			// check high (low)
-			if bar.Low < trade.High {
-				trade.High = bar.Low
-				trade.HighAfterBars = trade.BarCnt
-				trade.HighAt = bar.Timestamp
-			}
-			// adjust stops
-			if bar.Low < trade.Open-trade.StopPoints {
-				//trade.Stop = bar.Low + trade.StopPoints // move stop down
-				//trade.StopLog = append(trade.StopLog, &srs.StopLog{
-				//	Stop:      trade.Stop,
-				//	Idx:       i,
-				//	Timestamp: bar.Timestamp,
-				//})
-			}
-			// check stops
-			if bar.High >= trade.Stop {
-				return closeTrade("stop", trade.Stop+slippage())
-			}
-			// check target
-			if bar.Low <= trade.Target {
-				return closeTrade("target", trade.Target+slippage())
-			}
-		default:
-			panic("invalid direction")
-		}
-	*/
 	return trade
 }
 
@@ -544,7 +522,7 @@ func (s *Strategy) runUI() {
 			continue
 		}
 		for _, trade := range signal.Trades {
-			if trade.TargetAtBars != 0 {
+			if trade.Profit() > 0 {
 				//fmt.Printf("hit: %0.2f\n", bar.Trade.Profit())
 				targetHits++
 			} else {
@@ -569,7 +547,7 @@ func (s *Strategy) runUI() {
 			intervals[k] = &winloss{}
 		}
 		for _, trade := range signal.Trades {
-			if trade.TargetAtBars != 0 {
+			if trade.Profit() > 0 {
 				intervals[k].addWin()
 			} else {
 				intervals[k].addLoss()
@@ -639,13 +617,6 @@ func (s *Strategy) httpserver(bars pp.Series) http.HandlerFunc {
 
 		var opt []charts.SeriesOpts
 
-		log.Println("------------------")
-		log.Println("signal", signal.Bar.Timestamp.Format("15:04"), signal.Bar.High, signal.Bar.Low)
-		for _, trade := range signal.Trades {
-			log.Println("entry", trade.OpenAt.Format("15:04"), trade.Open, trade.Direction)
-			log.Println("exit", trade.CloseAt.Format("15:04"), trade.Close)
-			log.Println("     profit", trade.Profit())
-		}
 		arrow := func(y float64, x time.Time, label string) opts.MarkPointDataItem {
 			return opts.MarkPointDataItem{
 				Value: label,
@@ -743,6 +714,21 @@ func (s *Strategy) httpserver(bars pp.Series) http.HandlerFunc {
 			_, _ = w.Write([]byte(fmt.Sprintf("<a href='/?signalIndex=%d'>Next&gt;&gt;</a>", next)))
 		}
 		_, _ = w.Write([]byte("<br><br><a href='/'>Home</a>"))
+
+		td := func(inner any) string {
+			return fmt.Sprint("<td>", inner, "</td>")
+		}
+
+		summary := strings.Builder{}
+		summary.WriteString("<hr/><table border=1><tr>")
+		summary.WriteString(fmt.Sprintln("<tr><th>signal</th>", td(signal.Bar.Timestamp.Format("15:04")), td(signal.Bar.High), td(signal.Bar.Low), "<td></td><td></td></tr>"))
+		summary.WriteString("<tr><th></th><th>Index</th><th>Time</th><th>Price</th><th>Dir/Result</th><th>Reason</th>")
+		for _, trade := range signal.Trades {
+			summary.WriteString(fmt.Sprintln("<tr><th>entry</th>", td(trade.OpenAtIdx), td(trade.OpenAt.Format("15:04")), td(trade.Open), td(trade.Direction), td(trade.Reason), "</tr>"))
+			summary.WriteString(fmt.Sprintln("<tr><th>exit</th>", td(trade.CloseAtIdx), td(trade.CloseAt.Format("15:04")), td(trade.Close), td(trade.Profit()), td(trade.CloseReason), "</tr>"))
+		}
+		summary.WriteString("</table></pre>")
+		_, _ = w.Write([]byte(summary.String()))
 	}
 }
 
