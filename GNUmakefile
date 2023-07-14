@@ -53,12 +53,12 @@ build:
 deploy:
 	gcloud config configurations activate pp
 	gcloud builds submit --config scraper.yaml
-	gcloud run deploy scraper \
-			--image gcr.io/peak-profits/scraper \
-			--platform=managed \
-			--region us \
-			--project peak-profits
+	gcloud beta compute ssh scraper -- sudo systemctl restart konlet-startup
+	gcloud beta compute ssh scraper -- docker ps -a
+	gcloud beta compute ssh scraper -- docker logs --since 10s klt-scraper-ioog
 
+ssh-scraper:
+	gcloud beta compute ssh scraper
 
 # disables all implicit rules
 .SUFFIXES:

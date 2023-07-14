@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/mwlazlo/srs/internal/pp"
 )
 
 const UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0"
@@ -417,6 +418,6 @@ func (s *Scraper) Subscribe(q MarketQuote) {
 	s.connection.Subscribe(subs)
 }
 
-func (s *Scraper) GetPriceChannel() chan *Price {
+func (s *Scraper) GetPriceChannel() chan *pp.Price {
 	return s.connection.PriceCh
 }

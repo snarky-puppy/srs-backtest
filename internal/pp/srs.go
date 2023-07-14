@@ -111,7 +111,7 @@ func (s *SRS) PrintStats() {
 	for _, t := range s.Trades {
 		p := t.Profit()
 		profit += p
-		if t.WasStoppedOut() {
+		if t.WasStoppedOutForZero() {
 			stops++
 		} else {
 			profitable++

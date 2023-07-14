@@ -34,7 +34,7 @@ func main() {
 			return
 		case price := <-ch:
 			fmt.Println("Received update", price.String())
-			db.Write(quoteToName[price.QuoteID], price)
+			db.Write(quoteToName[price.QuoteID], price.Timestamp, price.Bid, price.Ask)
 		}
 	}
 }

@@ -17,24 +17,24 @@ type Signal struct {
 	Idx         int // first bar of the 3 signal bars
 
 	Trades     []*Trade
-	CanTradeFn func(Signal) bool
+	CanTradeFn func(Signal, Direction) bool
 }
 
 // High returns higher signal breakout with increasing number of trades
 func (s Signal) High() float64 {
-	return s.Bar.High + 2.0 + (float64(len(s.Trades)) * 2.0)
+	return s.Bar.High + 3.0 + (float64(len(s.Trades)) * 2.0)
 }
 
 // Low returns lower signal breakout with increasing number of trades
 func (s Signal) Low() float64 {
-	return s.Bar.Low - 2.0 - (float64(len(s.Trades)) * 2.0)
+	return s.Bar.Low - 3.0 - (float64(len(s.Trades)) * 2.0)
 }
 
-func (s Signal) CanTrade() bool {
+func (s Signal) CanTrade(direction Direction) bool {
 	if s.CanTradeFn != nil {
-		return s.CanTradeFn(s)
+		return s.CanTradeFn(s, direction)
 	}
-	return len(s.Trades) < 3
+	return len(s.Trades) == 0
 }
 
 func (s Signal) EndsAt() time.Time {
@@ -180,7 +180,7 @@ func (s Series) FilterYear(year int) (rv Series) {
 }
 
 // There is a trade at next, get the bars before and after it
-func (s Series) SignalContext(signal *Signal) (rv Series) {
+func (s Series) SignalContext(signal *Signal) (idx int, rv Series) {
 	start := signal.Idx - 20
 	var end int
 	if len(signal.Trades) > 0 {
@@ -205,7 +205,7 @@ func (s Series) SignalContext(signal *Signal) (rv Series) {
 		//}
 		rv = append(rv, s[i])
 	}
-	return rv
+	return start, rv
 }
 
 func ReadBarsFromCSV(filename string, useLocalTz bool) (Series, error) {

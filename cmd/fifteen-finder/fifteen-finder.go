@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
-	"github.com/go-echarts/go-echarts/v2/components"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-echarts/go-echarts/v2/components"
 
 	"github.com/go-echarts/go-echarts/v2/charts"
 	"github.com/go-echarts/go-echarts/v2/opts"
@@ -152,6 +153,7 @@ func normalRun() {
 		Period: period,
 	}
 	strategy.runTrades()
+	strategy.printResult()
 	strategy.runUI()
 }
 
@@ -227,7 +229,7 @@ func (s *Strategy) runTrades() {
 			if trades != nil {
 				continue
 			}
-			continue // don't scan immediately after closing a trade
+			//continue // don't scan immediately after closing a trade
 		}
 
 		if bar.Timestamp.Format("2006-01-02T15:04:05") == "2000-06-06T11:00:00" {
@@ -246,19 +248,36 @@ func (s *Strategy) runTrades() {
 			for _, b := range last3Bars[1:] {
 				signalBar.Add(b)
 			}
-			srsSignal = &pp.Signal{Bar: signalBar, Idx: i - 3, BarDuration: 15 * time.Minute}
+			srsSignal = &pp.Signal{
+				Bar:         signalBar,
+				Idx:         i - 3,
+				BarDuration: 15 * time.Minute,
+				CanTradeFn: func(signal pp.Signal, direction pp.Direction) bool {
+					// we can trade on each direction only twice
+					cnt := 0
+					for _, trade := range signal.Trades {
+						if trade.Direction == direction && !trade.IsAdditional {
+							cnt++
+							if cnt >= 3 {
+								return false
+							}
+						}
+					}
+					return true
+				},
+			}
 			s.Signals = append(s.Signals, srsSignal)
 			prevBar = signalBar // fake it for the first bar after the signal
 		}
 
 		// check srs signal crossed
-		if srsSignal != nil && srsSignal.CanTrade() {
+		if srsSignal != nil {
 
 			// if our signal is good, enter the trade
 			// price has to "cross over" the signal line
 			high := srsSignal.High()
 			low := srsSignal.Low()
-			if prevBar.High <= high && bar.High > high {
+			if prevBar.High <= high && bar.High > high && srsSignal.CanTrade(pp.Long) {
 				entry := high // stop order was set here
 				stopPrice := stop(srsSignal.Bar, pp.Long)
 				trade := pp.NewTrade(pp.Long, entry, stopPrice, target(entry, pp.Long), i, bar, srsSignal, "srs crossover")
@@ -266,7 +285,7 @@ func (s *Strategy) runTrades() {
 				trades = append(trades, trade)
 				continue
 
-			} else if prevBar.Low >= low && bar.Low < low {
+			} else if prevBar.Low >= low && bar.Low < low && srsSignal.CanTrade(pp.Short) {
 				entry := low // stop order was set here
 				stopPrice := stop(srsSignal.Bar, pp.Short)
 				trade := pp.NewTrade(pp.Short, entry, stopPrice, target(entry, pp.Short), i, bar, srsSignal, "srs crossover")
@@ -294,7 +313,7 @@ func (s *Strategy) runTrades() {
 					Bar:         tRange,
 					Idx:         idx,
 					BarDuration: 10 * (5 * time.Minute),
-					CanTradeFn: func(s pp.Signal) bool {
+					CanTradeFn: func(s pp.Signal, direction pp.Direction) bool {
 						return len(s.Trades) == 0
 					},
 				}
@@ -303,12 +322,12 @@ func (s *Strategy) runTrades() {
 		}
 
 		// check range signal crossed
-		if rangeSignal != nil && rangeSignal.CanTrade() {
+		if rangeSignal != nil {
 			// if our signal is good, enter the trade
 			// price has to "cross over" the signal line
 			high := rangeSignal.High()
 			low := rangeSignal.Low()
-			if prevBar.High <= high && bar.High > high {
+			if prevBar.High <= high && bar.High > high && rangeSignal.CanTrade(pp.Long) {
 				entry := high // stop order was set here
 				stopPrice := stop(rangeSignal.Bar, pp.Long)
 				trade := pp.NewTrade(pp.Long, entry, stopPrice, target(entry, pp.Long), i, bar, rangeSignal, "range crossover")
@@ -317,7 +336,7 @@ func (s *Strategy) runTrades() {
 				trades = append(trades, trade)
 				continue
 
-			} else if prevBar.Low >= low && bar.Low < low {
+			} else if prevBar.Low >= low && bar.Low < low && rangeSignal.CanTrade(pp.Short) {
 				entry := low // stop order was set here
 				stopPrice := stop(rangeSignal.Bar, pp.Short)
 				trade := pp.NewTrade(pp.Short, entry, stopPrice, target(entry, pp.Short), i, bar, rangeSignal, "range crossover")
@@ -343,66 +362,83 @@ func (s *Strategy) IsPeriod(t time.Time) bool {
 
 // plural
 func manageTrades(i int, trades []*pp.Trade, bar *pp.Bar, signal *pp.Signal) (rv []*pp.Trade) {
-
-	// what to do when a trade reaches it's target
-	onTarget := func(winner *pp.Trade) {
-
-		/*
-			What kind of day is it?
-			Volatile?
-			Slow?
-			Trending?
-			Something else?
-			Choppy
-			Range bound
-			Breakout
-			Consolidating
-		*/
-
-		if winner.AutoAdjustStop {
-			return
-		}
-
-		if winner.IsLoser() {
-			return // it means the loser is stopped for 0 or a loss
-		}
-
-		reachedTarget := winner.Target
-		half := 15.0 // float64(TargetPoints / 2)
-		// adjust stop to target / 2
-		switch winner.Direction {
-		case pp.Long:
-			winner.AdjustStop(winner.Target-half, i, bar)
-			winner.Target = winner.Target + half
-		case pp.Short:
-			winner.AdjustStop(winner.Target+half, i, bar)
-			winner.Target = winner.Target - half
-		}
-		winner.AutoAdjustStop = true
-
-		// create a new trade to add to the position
-		newTrade := pp.NewTrade(winner.Direction, reachedTarget, winner.Stop, winner.Target, i, bar, signal, "add to position")
-		newTrade.AutoAdjustStop = true
-		newTrade.DisableLoserCheck = true
-		signal.Trades = append(signal.Trades, newTrade)
-		rv = append(rv, newTrade)
-	}
-
 	for _, trade := range trades {
-		t := manageTrade(i, trade, bar, signal, onTarget)
+		if !trade.IsAdditional && trade.CanAddToPosition && len(signal.Trades) < 10 {
+			newTrade := considerAddingToPosition(i, trade, bar, signal)
+			if newTrade != nil {
+				rv = append(rv, newTrade)
+				signal.Trades = append(signal.Trades, newTrade)
+			}
+		}
+		t := manageTrade(i, trade, bar, signal)
 		if t != nil {
 			rv = append(rv, t)
 		}
 		if len(rv) > 100 {
-			log.Println("break", len(rv))
+			log.Println("break")
 		}
 	}
 
 	return
 }
 
+func considerAddingToPosition(i int, winner *pp.Trade, bar *pp.Bar, signal *pp.Signal) *pp.Trade {
+	winner.CanAddToPosition = false // only 1 chance to add to position
+
+	// before: total profits: 37601
+	// after:  total profits: 19967
+	//if winner.Loser >= 2.5 {
+	//	return nil
+	//}
+
+	// we would add an entry at the top of the previous bar high
+	// so if this bar doesn't reach that high, we don't add
+	// before: 43092
+	// after: 55090
+	switch winner.Direction {
+	case pp.Long:
+		if bar.High < bars[i-1].High {
+			return nil
+		}
+	case pp.Short:
+		if bar.Low > bars[i-1].Low {
+			return nil
+		}
+	}
+
+	reachedTarget := winner.Target
+	half := 15.0 // float64(TargetPoints / 2)
+	// adjust stop to target / 2
+	switch winner.Direction {
+	case pp.Long:
+		winner.AdjustStop(winner.Target-half, i, bar)
+		winner.Target = winner.Target + half
+	case pp.Short:
+		winner.AdjustStop(winner.Target+half, i, bar)
+		winner.Target = winner.Target - half
+	}
+	winner.AutoAdjustStop = true
+
+	//switch winner.Direction {
+	//case pp.Long:
+	//	if bars[i-1].High >= winner.Target {
+	//		return nil
+	//	}
+	//case pp.Short:
+	//	if bars[i-1].Low <= winner.Target {
+	//		return nil
+	//	}
+	//}
+
+	newTrade := pp.NewTrade(winner.Direction, reachedTarget, winner.Stop, winner.Target, i, bar, signal, "add to position")
+	newTrade.AutoAdjustStop = true
+	newTrade.DisableLoserCheck = true
+	newTrade.IsAdditional = true
+	return newTrade
+}
+
 // singular
-func manageTrade(i int, trade *pp.Trade, bar *pp.Bar, signal *pp.Signal, onTarget func(*pp.Trade)) *pp.Trade {
+func manageTrade(i int, trade *pp.Trade, bar *pp.Bar, signal *pp.Signal) *pp.Trade {
 	trade.BarCnt++
 
 	closeTrade := func(reason string, price float64) *pp.Trade {
@@ -420,9 +456,9 @@ func manageTrade(i int, trade *pp.Trade, bar *pp.Bar, signal *pp.Signal, onTarge
 
 	// region normal stopped out
 	switch {
-	case trade.Direction == pp.Long && bar.Low < trade.Stop:
+	case trade.Direction == pp.Long && bar.Low <= trade.Stop:
 		return closeTrade("stop", trade.Stop-slippage())
-	case trade.Direction == pp.Short && bar.High > trade.Stop:
+	case trade.Direction == pp.Short && bar.High >= trade.Stop:
 		return closeTrade("stop", trade.Stop+slippage())
 	}
 	// endregion
@@ -476,15 +512,13 @@ func manageTrade(i int, trade *pp.Trade, bar *pp.Bar, signal *pp.Signal, onTarge
 	switch trade.Direction {
 	case pp.Long:
 		if bar.High >= trade.Target {
-			onTarget(trade)
+			trade.CanAddToPosition = true
 			return trade
-			//return closeTrade("target", trade.Target-slippage())
 		}
 	case pp.Short:
 		if bar.Low <= trade.Target {
-			onTarget(trade)
+			trade.CanAddToPosition = true
 			return trade
-			//return closeTrade("target", trade.Target+slippage())
 		}
 	}
 	// endregion target
@@ -494,39 +528,239 @@ func manageTrade(i int, trade *pp.Trade, bar *pp.Bar, signal *pp.Signal, onTarge
 
 func (s *Strategy) runUI() {
 
-	// print first trade
-	//for i := len(bars) - 1; i > 0; i-- {
-	//	bar := bars[i]
-	//	if bar.Trade != nil {
-	//		t := *bar.Trade
-	//		t.Signal.Bar.Trade = nil
-	//		t.CloseAtBar = nil
-	//		t.OpenAtBar = nil
-	//		fmt.Printf("dbg index: %d profit=%0.2f\n", i, t.Profit())
-	//		if err := json.NewEncoder(os.Stderr).Encode(t); err != nil {
-	//			panic(err)
-	//		}
-	//		break
-	//	}
-	//}
+	log.Println("opening http://localhost:8081/")
+	fs := http.FileServer(http.Dir("./static"))
+	http.Handle("/static/", http.StripPrefix("/static/", fs))
+	http.HandleFunc("/", s.httpserver(bars))
+	_ = http.ListenAndServe("localhost:8081", nil)
+}
 
+func (s *Strategy) GetResult() (rv Result) {
+	rv.Period = s.Period
+	for _, signal := range s.Signals {
+		for _, trade := range signal.Trades {
+			rv.AddTrade(trade)
+		}
+	}
+	return rv
+}
+
+func (s *Strategy) httpserver(bars pp.Series) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var (
+			signalIndex int
+			pl          float64
+		)
+
+		// take ?index= parameter
+		if r.URL.Query().Get("signalIndex") != "" {
+			var err error
+			i, err := strconv.ParseInt(r.URL.Query().Get("signalIndex"), 10, 64)
+			if err != nil {
+				fmt.Println(err)
+			}
+			signalIndex = int(i)
+		} else {
+			signalIndex = 0
+		}
+
+		signal := s.Signals[signalIndex]
+		if signal == nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		line := createLineChart(signal)
+
+		var opt []charts.SeriesOpts
+
+		//lArrow := func(y float64, x time.Time, label string) opts.MarkPointDataItem {
+		//	return opts.MarkPointDataItem{
+		//		Value: label,
+		//		ItemStyle: &opts.ItemStyle{
+		//			Color:       "auto",
+		//			BorderColor: "black",
+		//		},
+		//		Label: &opts.Label{
+		//			Show:     true,
+		//			Position: "right",
+		//		},
+		//		Symbol:       "arrow",
+		//		SymbolRotate: 90,
+		//		SymbolSize:   10,
+		//		YAxis:        y,
+		//		XAxis:        x,
+		//	}
+		//}
+
+		//rArrow := func(y float64, x time.Time, label string) opts.MarkPointDataItem {
+		//	return opts.MarkPointDataItem{
+		//		Value: label,
+		//		ItemStyle: &opts.ItemStyle{
+		//			Color:       "auto",
+		//			BorderColor: "black",
+		//		},
+		//		Label: &opts.Label{
+		//			Show:     true,
+		//			Position: "left",
+		//		},
+		//		Symbol:       "arrow",
+		//		SymbolRotate: 180,
+		//		SymbolSize:   10,
+		//		YAxis:        y,
+		//		XAxis:        x,
+		//	}
+		//}
+
+		// region signal
+		opt = append(opt,
+			charts.WithMarkAreaDataItem(
+				opts.MarkAreaDataItem{
+					YAxis: signal.Bar.High,
+					XAxis: signal.Bar.Timestamp,
+					ItemStyle: &opts.ItemStyle{
+						BorderColor: "rgba(255, 0, 0, 0.3)",
+						BorderWidth: 1,
+					},
+				},
+				opts.MarkAreaDataItem{
+					YAxis: signal.Bar.Low,
+					XAxis: signal.EndsAt(),
+				},
+			),
+			charts.WithMarkAreaDataItem(
+				opts.MarkAreaDataItem{
+					YAxis: signal.Bar.High,
+					ItemStyle: &opts.ItemStyle{
+						Color: "rgba(238, 238, 238, 0.7)",
+					},
+				},
+				opts.MarkAreaDataItem{
+					YAxis: signal.Bar.Low,
+				},
+			))
+		// endregion
+
+		for _, trade := range signal.Trades {
+			// profit section
+			opt = append(opt,
+				charts.WithMarkAreaDataItem(
+					opts.MarkAreaDataItem{
+						YAxis: trade.Open,
+						XAxis: trade.OpenAt,
+						ItemStyle: &opts.ItemStyle{
+							BorderColor: "rgba(255, 0, 0, 0.3)",
+							BorderWidth: 1,
+						},
+					},
+					opts.MarkAreaDataItem{
+						YAxis: signal.Bar.Low,
+						XAxis: signal.EndsAt(),
+					},
+				),
+			)
+
+		}
+
+		//for _, trade := range signal.Trades {
+		//var high opts.MarkPointDataItem
+		//if trade.Direction == pp.Long && trade.HighAfterBars != 0 {
+		//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("High +%0.2f", trade.High-trade.Open))
+		//}
+		//if trade.Direction == pp.Short && trade.HighAfterBars != 0 {
+		//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("Low +%0.2f", trade.Open-trade.High))
+		//}
+		//opt = append(opt, charts.WithMarkPointDataItem(
+		//	high,
+		//	lArrow(trade.Open, trade.OpenAt, "Entry "+trade.Direction.String()),
+		//	lArrow(trade.Close, trade.CloseAt, fmt.Sprintf("Exit %0.2f (%s)", trade.Profit(), trade.CloseReason)),
+		//))
+
+		// track stop
+
+		//}
+
+		dataStartIdx, data := bars.SignalContext(signal)
+
+		line.SetXAxis(data.ToChartXAxis()).
+			AddSeries("", data.ToChartData(), opt...)
+
+		for idx, trade := range signal.Trades {
+			series := charts.SingleSeries{Name: fmt.Sprintf("Trade %d stop", idx),
+				Type: types.ChartLine,
+				Data: trade.PlotStopLine(data, dataStartIdx),
+			}
+			line.MultiSeries = append(line.MultiSeries, series)
+			pl += trade.Profit()
+		}
+
+		page := components.NewPage()
+		page.Initialization.AssetsHost = "/static/"
+		page.AddCharts(line)
+		err := page.Render(w)
+		if err != nil {
+			panic(err)
+		}
+
+		next := signalIndex + 1
+		prev := signalIndex - 1
+
+		if prev >= 0 {
+			_, _ = w.Write([]byte(fmt.Sprintf("<a href='/?signalIndex=%d'>&lt;&lt;Prev</a>&nbsp;&nbsp;", prev)))
+		}
+		if next < len(s.Signals) {
+			_, _ = w.Write([]byte(fmt.Sprintf("<a href='/?signalIndex=%d'>Next&gt;&gt;</a>", next)))
+		}
+		_, _ = w.Write([]byte("<br><br><a href='/'>Home</a>"))
+
+		td := func(inner any) string {
+			return fmt.Sprint("<td>", inner, "</td>")
+		}
+
+		summary := strings.Builder{}
+		summary.WriteString("<hr/><table border=1><tr>")
+		summary.WriteString(fmt.Sprintln("<tr><th>signal</th>", td(signal.Bar.Timestamp.Format("15:04")), td(signal.Bar.High), td(signal.Bar.Low), "<td></td><td></td></tr>"))
+		summary.WriteString("<tr><th></th><th>Index</th><th>Time</th><th>Price</th><th>Dir/Result</th><th>Reason</th>")
+		for _, trade := range signal.Trades {
+			summary.WriteString(fmt.Sprintln("<tr><th>entry</th>", td(trade.OpenAtIdx), td(trade.OpenAt.Format("15:04")), td(trade.Open), td(trade.Direction), td(trade.Reason), "</tr>"))
+			summary.WriteString(fmt.Sprintln("<tr><th>exit</th>", td(trade.CloseAtIdx), td(trade.CloseAt.Format("15:04")), td(trade.Close), td(trade.Profit()), td(trade.CloseReason), "</tr>"))
+		}
+		summary.WriteString(fmt.Sprintf("<tr><th></th><th></th><th></th><th></th><th>%0.2f</th><th></th>", pl))
+		summary.WriteString("</table></pre>")
+		_, _ = w.Write([]byte(summary.String()))
+	}
+}
+
+func (s *Strategy) printResult() {
 	// find what precentage of trades hit target
 	var (
-		targetHits int
-		targetMiss int
-		noTrades   int
+		targetHits          int
+		targetMiss          int
+		noTrades            int
+		biggestProfit       *pp.Trade
+		biggestLoss         *pp.Trade
+		biggestProfitSigIdx int
+		biggestLossSigIdx   int
 	)
-	for _, signal := range s.Signals {
+	for sigIdx, signal := range s.Signals {
 		if len(signal.Trades) == 0 {
 			noTrades++
 			continue
 		}
 		for _, trade := range signal.Trades {
+			if biggestLoss == nil || trade.Profit() < biggestLoss.Profit() {
+				biggestLossSigIdx = sigIdx
+				biggestLoss = trade
+			}
+			if biggestProfit == nil || trade.Profit() > biggestProfit.Profit() {
+				biggestProfitSigIdx = sigIdx
+				biggestProfit = trade
+			}
 			if trade.Profit() > 0 {
-				//fmt.Printf("hit: %0.2f\n", bar.Trade.Profit())
+				//fmt.Printf("hit: %0.2f\n", trade.Profit())
 				targetHits++
 			} else {
-				//fmt.Printf("miss: %0.2f\n", bar.Trade.Profit())
+				//fmt.Printf("miss: %0.2f\n", trade.Profit())
 				targetMiss++
 			}
 		}
@@ -535,6 +769,8 @@ func (s *Strategy) runUI() {
 	// as a percentage of wins
 	fmt.Printf("target hits: %f\n", float64(targetHits)/float64(targetHits+targetMiss))
 	fmt.Printf("no trades: %d\n", noTrades)
+	fmt.Printf("biggest profit: %0.2f\thttp://localhost:8081/?signalIndex=%d\n", biggestProfit.Profit(), biggestProfitSigIdx)
+	fmt.Printf("biggest loss: %0.2f\thttp://localhost:8081/?signalIndex=%d\n", biggestLoss.Profit(), biggestLossSigIdx)
 
 	// find which day of the week had the most wins, on average
 	var (
@@ -573,163 +809,6 @@ func (s *Strategy) runUI() {
 		}
 	}
 	fmt.Printf("total profit: %f\n", totalProfit)
-
-	log.Println("opening http://localhost:8081/")
-	fs := http.FileServer(http.Dir("./static"))
-	http.Handle("/static/", http.StripPrefix("/static/", fs))
-	http.HandleFunc("/", s.httpserver(bars))
-	_ = http.ListenAndServe(":8081", nil)
-}
-
-func (s *Strategy) GetResult() (rv Result) {
-	rv.Period = s.Period
-	for _, signal := range s.Signals {
-		for _, trade := range signal.Trades {
-			rv.AddTrade(trade)
-		}
-	}
-	return rv
-}
-
-func (s *Strategy) httpserver(bars pp.Series) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var signalIndex int
-
-		// take ?index= parameter
-		if r.URL.Query().Get("signalIndex") != "" {
-			var err error
-			i, err := strconv.ParseInt(r.URL.Query().Get("signalIndex"), 10, 64)
-			if err != nil {
-				fmt.Println(err)
-			}
-			signalIndex = int(i)
-		} else {
-			signalIndex = 0
-		}
-
-		signal := s.Signals[signalIndex]
-		if signal == nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		line := createLineChart(signal)
-
-		var opt []charts.SeriesOpts
-
-		arrow := func(y float64, x time.Time, label string) opts.MarkPointDataItem {
-			return opts.MarkPointDataItem{
-				Value: label,
-				ItemStyle: &opts.ItemStyle{
-					Color:       "auto",
-					BorderColor: "black",
-				},
-				Label: &opts.Label{
-					Show:     true,
-					Position: "right",
-				},
-				Symbol:       "arrow",
-				SymbolRotate: 90,
-				SymbolSize:   10,
-				YAxis:        y,
-				XAxis:        x,
-			}
-		}
-
-		// region signal
-		opt = append(opt,
-			charts.WithMarkAreaDataItem(
-				opts.MarkAreaDataItem{
-					YAxis: signal.Bar.High,
-					XAxis: signal.Bar.Timestamp,
-					ItemStyle: &opts.ItemStyle{
-						BorderColor: "rgba(255, 0, 0, 0.3)",
-						BorderWidth: 1,
-					},
-				},
-				opts.MarkAreaDataItem{
-					YAxis: signal.Bar.Low,
-					XAxis: signal.EndsAt(),
-				},
-			),
-			charts.WithMarkAreaDataItem(
-				opts.MarkAreaDataItem{
-					YAxis: signal.Bar.High,
-					ItemStyle: &opts.ItemStyle{
-						Color: "rgba(238, 238, 238, 0.7)",
-					},
-				},
-				opts.MarkAreaDataItem{
-					YAxis: signal.Bar.Low,
-				},
-			))
-		// endregion
-
-		for _, trade := range signal.Trades {
-			var high opts.MarkPointDataItem
-			if trade.Direction == pp.Long && trade.HighAfterBars != 0 {
-				high = arrow(trade.High, trade.HighAt, fmt.Sprintf("High +%0.2f", trade.High-trade.Open))
-			}
-			if trade.Direction == pp.Short && trade.HighAfterBars != 0 {
-				high = arrow(trade.High, trade.HighAt, fmt.Sprintf("Low +%0.2f", trade.Open-trade.High))
-			}
-			opt = append(opt, charts.WithMarkPointDataItem(
-				high,
-				arrow(trade.Open, trade.OpenAt, "Entry "+trade.Direction.String()),
-				arrow(trade.Close, trade.CloseAt, fmt.Sprintf("Exit- %0.2f (%s)", trade.Profit(), trade.CloseReason)),
-			))
-
-			// track stop
-
-		}
-
-		data := bars.SignalContext(signal)
-
-		line.SetXAxis(data.ToChartXAxis()).
-			AddSeries("", data.ToChartData(), opt...)
-
-		for idx, trade := range signal.Trades {
-			series := charts.SingleSeries{Name: fmt.Sprintf("Trade %d stop", idx),
-				Type: types.ChartLine,
-				Data: trade.PlotStopLine(data),
-			}
-			line.MultiSeries = append(line.MultiSeries, series)
-		}
-
-		page := components.NewPage()
-		page.Initialization.AssetsHost = "/static/"
-		page.AddCharts(line)
-		err := page.Render(w)
-		if err != nil {
-			panic(err)
-		}
-
-		next := signalIndex + 1
-		prev := signalIndex - 1
-
-		if prev >= 0 {
-			_, _ = w.Write([]byte(fmt.Sprintf("<a href='/?signalIndex=%d'>&lt;&lt;Prev</a>&nbsp;&nbsp;", prev)))
-		}
-		if next < len(s.Signals) {
-			_, _ = w.Write([]byte(fmt.Sprintf("<a href='/?signalIndex=%d'>Next&gt;&gt;</a>", next)))
-		}
-		_, _ = w.Write([]byte("<br><br><a href='/'>Home</a>"))
-
-		td := func(inner any) string {
-			return fmt.Sprint("<td>", inner, "</td>")
-		}
-
-		summary := strings.Builder{}
-		summary.WriteString("<hr/><table border=1><tr>")
-		summary.WriteString(fmt.Sprintln("<tr><th>signal</th>", td(signal.Bar.Timestamp.Format("15:04")), td(signal.Bar.High), td(signal.Bar.Low), "<td></td><td></td></tr>"))
-		summary.WriteString("<tr><th></th><th>Index</th><th>Time</th><th>Price</th><th>Dir/Result</th><th>Reason</th>")
-		for _, trade := range signal.Trades {
-			summary.WriteString(fmt.Sprintln("<tr><th>entry</th>", td(trade.OpenAtIdx), td(trade.OpenAt.Format("15:04")), td(trade.Open), td(trade.Direction), td(trade.Reason), "</tr>"))
-			summary.WriteString(fmt.Sprintln("<tr><th>exit</th>", td(trade.CloseAtIdx), td(trade.CloseAt.Format("15:04")), td(trade.Close), td(trade.Profit()), td(trade.CloseReason), "</tr>"))
-		}
-		summary.WriteString("</table></pre>")
-		_, _ = w.Write([]byte(summary.String()))
-	}
 }
 
 func createLineChart(signal *pp.Signal) *charts.Kline {

@@ -1,0 +1,26 @@
+package internal
+
+import (
+	"context"
+	"os"
+	"os/signal"
+	"syscall"
+)
+
+// create a function that returns  a context.Context that will be cancelled when program receives signal
+// eg: SIGINT (ctrl+c) or SIGTERM (docker stop)
+func Graceful() context.Context {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Create a channel to receive OS signals
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start a goroutine to receive OS signal
+	go func() {
+		<-sig
+		cancel()
+	}()
+
+	return ctx
+}

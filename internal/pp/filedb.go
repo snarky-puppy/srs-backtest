@@ -2,7 +2,6 @@ package pp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
@@ -73,9 +72,9 @@ func (db *FileDB) createFileDescriptor(filename string) (*storage.Writer, error)
 
 func (db *FileDB) sync(ctx context.Context) {
 	now := time.Now()
-	nextFifteen := now.Truncate(15 * time.Minute).Add(15 * time.Minute).Sub(now)
+	next := now.Truncate(6 * time.Hour).Add(6 * time.Hour).Sub(now)
 
-	log.Printf("Next sync is %s", nextFifteen)
+	log.Printf("Next sync is %s", next)
 
 	for {
 		select {
@@ -83,7 +82,7 @@ func (db *FileDB) sync(ctx context.Context) {
 			db.closeFileDescriptors()
 			close(db.DoneCh)
 			return
-		case <-time.After(nextFifteen):
+		case <-time.After(next):
 			db.fileDescriptorsMux.Lock()
 
 			// Flush and close the current file descriptors
@@ -94,8 +93,8 @@ func (db *FileDB) sync(ctx context.Context) {
 
 			db.fileDescriptorsMux.Unlock()
 
-			nextFifteen = 15 * time.Minute
-			log.Printf("Next sync is %s", nextFifteen)
+			next = 6 * time.Hour
+			log.Printf("Next sync is %s", next)
 		}
 	}
 }
@@ -110,7 +109,7 @@ func (db *FileDB) closeFileDescriptors() {
 	db.fileDescriptors = make(map[string]*storage.Writer)
 }
 
-func (db *FileDB) Write(name string, data interface{}) {
+func (db *FileDB) Write(name string, ts time.Time, bid, ask float64) {
 	fd, ok := db.fileDescriptors[name]
 	if !ok {
 		db.fileDescriptorsMux.Lock()
@@ -121,8 +120,10 @@ func (db *FileDB) Write(name string, data interface{}) {
 			log.Printf("error creating file descriptor: %v", err)
 		}
 	}
-	err := json.NewEncoder(fd).Encode(data)
-	if err != nil {
+
+	line := fmt.Sprintf("%s,%f,%f\n", ts.UTC().Format(time.RFC3339), bid, ask)
+	log.Println("Writing", line)
+	if _, err := fd.Write([]byte(line)); err != nil {
 		log.Printf("error encoding data: %v", err)
 	}
 }

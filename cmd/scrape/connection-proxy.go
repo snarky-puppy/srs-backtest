@@ -22,7 +22,7 @@ type ConnectionProxy struct {
 	tradingAccountType string
 	messages           []*Subscription
 	conn               *websocket.Conn
-	PriceCh            chan *Price
+	PriceCh            chan *pp.Price
 	connectionId       *string
 	receiveAuthOK      chan bool
 }
@@ -79,7 +79,7 @@ func NewConnectionProxy(environment, loginId, tradingAccountType string) *Connec
 		tradingAccountType: tradingAccountType,
 		mainUrl:            fmt.Sprintf("https://%s", mainUrl),
 		websocketUrl:       fmt.Sprintf("wss://%s", mainUrl),
-		PriceCh:            make(chan *Price, 10),
+		PriceCh:            make(chan *pp.Price, 10),
 		receiveAuthOK:      make(chan bool, 0),
 	}
 	return rv
@@ -225,7 +225,7 @@ func (c *ConnectionProxy) handleResponse(response *Response) {
 			log.Println(response.D.Error)
 		} else if response.D.Current != nil {
 			for _, x := range response.D.Current {
-				c.PriceCh <- NewPrice(x, response.D.PriceGrouping)
+				c.PriceCh <- pp.NewPrice(x, response.D.PriceGrouping)
 			}
 		}
 	case "connectResponse":
@@ -249,17 +249,17 @@ func (c *ConnectionProxy) handleResponse(response *Response) {
 	case "p":
 		if response.D.Grouped != nil {
 			for _, x := range response.D.Grouped {
-				c.PriceCh <- NewPrice(x, "Grouped")
+				c.PriceCh <- pp.NewPrice(x, "Grouped")
 			}
 		}
 		if response.D.Sampled != nil {
 			for _, x := range response.D.Sampled {
-				c.PriceCh <- NewPrice(x, "Sampled")
+				c.PriceCh <- pp.NewPrice(x, "Sampled")
 			}
 		}
 		if response.D.Delayed != nil {
 			for _, x := range response.D.Delayed {
-				c.PriceCh <- NewPrice(x, "Delayed")
+				c.PriceCh <- pp.NewPrice(x, "Delayed")
 			}
 		}
 	case "accountSummary":

@@ -9,6 +9,10 @@ import (
 	"github.com/go-echarts/go-echarts/v2/opts"
 )
 
+const (
+	MaxStop = 100
+)
+
 type Direction int
 
 func (d Direction) String() string {
@@ -35,6 +39,21 @@ type StopLog struct {
 }
 
 func NewTrade(direction Direction, open, stop, target float64, index int, bar *Bar, signal *Signal, reason string) *Trade {
+	// off: total profit: 20062
+	// on:  total profit: 19967
+	//switch direction {
+	//case Long:
+	//	if open-stop > MaxStop {
+	//		fmt.Println(open-stop, "stop too big")
+	//		stop = open - MaxStop
+	//	}
+	//case Short:
+	//	if stop-open > MaxStop {
+	//		fmt.Println(open-stop, "stop too big")
+	//		stop = open + MaxStop
+	//	}
+	//}
+
 	return &Trade{
 		Open: open,
 		Stop: stop,
@@ -86,6 +105,8 @@ type Trade struct {
 	Signal                  *Signal // the originating signal
 	AutoAdjustStop          bool    // if true, trade management will automatically update this trade's stop
 	Reason                  string
+	CanAddToPosition        bool
+	IsAdditional            bool
 }
 
 func (t *Trade) Profit() float64 {
@@ -104,30 +125,49 @@ func (t *Trade) IsStoppedOut(b Bar) bool {
 	}
 }
 
-func (t *Trade) WasStoppedOut() bool {
+func (t *Trade) WasStoppedOutForZero() bool {
 	return t.Close == t.Stop
 }
 
-func (t *Trade) PlotStopLine(bars Series) (stopLine []opts.KlineData) {
+func (t *Trade) PlotStopLine(bars Series, dataIdx int) (stopLine []opts.KlineData) {
 	var (
 		stopIdx = 0
 		curStop float64
 	)
 
-	for i := range bars {
-		switch {
-		case stopIdx == 0 && i+1 < len(bars) && bars[i+1].Timestamp.Equal(t.StopLog[stopIdx].Timestamp):
-			// add an extra stop line for the open
-			stopLine = append(stopLine, opts.KlineData{Value: fmt.Sprintf("%.2f", t.StopLog[stopIdx].Stop)})
-		case stopIdx < len(t.StopLog) && bars[i].Timestamp.Equal(t.StopLog[stopIdx].Timestamp):
-			curStop = t.StopLog[stopIdx].Stop
-			stopLine = append(stopLine, opts.KlineData{Value: fmt.Sprintf("%.2f", curStop)})
-			stopIdx++
-		case stopIdx > 0 && stopIdx < len(t.StopLog):
-			stopLine = append(stopLine, opts.KlineData{Value: fmt.Sprintf("%.2f", curStop)})
-		default:
-			stopLine = append(stopLine, opts.KlineData{Value: "-"})
+	for range bars {
+		if stopIdx < len(t.StopLog) {
+			stop := t.StopLog[stopIdx]
+			if stop.Idx == dataIdx {
+				curStop = stop.Stop
+				stopIdx++
+			}
 		}
+		if curStop == 0 {
+			stopLine = append(stopLine, opts.KlineData{Value: "-"})
+		} else {
+			stopLine = append(stopLine, opts.KlineData{Value: fmt.Sprintf("%.2f", curStop)})
+		}
+		if t.CloseAtIdx == dataIdx {
+			break
+		}
+		dataIdx++
+		/*
+			switch {
+			//case stopIdx == 0 && i+1 < len(bars) && bars[i+1].Timestamp.Equal(t.StopLog[stopIdx].Timestamp):
+				// add an extra stop line for the open
+				//stopLine = append(stopLine, opts.KlineData{Value: fmt.Sprintf("%.2f", t.StopLog[stopIdx].Stop)})
+			case stopIdx < len(t.StopLog) && bars[i].Timestamp.Equal(t.StopLog[stopIdx].Timestamp):
+				curStop = t.StopLog[stopIdx].Stop
+				stopLine = append(stopLine, opts.KlineData{Value: fmt.Sprintf("%.2f", curStop)})
+				stopIdx++
+			case stopIdx > 0 && stopIdx < len(t.StopLog):
+				stopLine = append(stopLine, opts.KlineData{Value: fmt.Sprintf("%.2f", curStop)})
+			default:
+				stopLine = append(stopLine, opts.KlineData{Value: "-"})
+			}
+
+		*/
 	}
 	return
 }
