@@ -62,40 +62,40 @@ func (s *SRS) trading(b Bar) {
 	// if this bar crosses over srsHigh, open a trade
 	if s.prevBar != nil && s.prevBar.High < s.srsHigh && b.Low < s.srsHigh && b.High > s.srsHigh {
 		s.activeTrade = &Trade{
-			Open:      s.srsHigh + 3,
-			Stop:      s.srsLow,
+			OpenPrice: s.srsHigh + 3,
+			StopPrice: s.srsLow,
 			Direction: Long,
-			OpenAt:    b.Timestamp,
+			OpenTime:  b.Timestamp,
 		}
 	}
 	// if this bar crosses under srsLow, open a trade
 	if s.prevBar != nil && s.prevBar.Low > s.srsLow && b.High > s.srsLow && b.Low < s.srsLow {
 		s.activeTrade = &Trade{
-			Open:      s.srsLow - 3,
-			Stop:      s.srsHigh,
+			OpenPrice: s.srsLow - 3,
+			StopPrice: s.srsHigh,
 			Direction: Short,
-			OpenAt:    b.Timestamp,
+			OpenTime:  b.Timestamp,
 		}
 	}
 }
 
 func (s *SRS) maintainActiveTrade(b Bar) {
 	if s.activeTrade.IsStoppedOut(b) {
-		s.activeTrade.CloseAt = b.Timestamp
-		s.activeTrade.Close = s.activeTrade.Stop
+		s.activeTrade.CloseTime = b.Timestamp
+		s.activeTrade.ClosePrice = s.activeTrade.StopPrice
 		s.Trades = append(s.Trades, *s.activeTrade)
 		s.activeTrade = nil
 	}
 	// take profit at 20 points
-	if s.activeTrade != nil && s.activeTrade.Direction == Long && b.High-s.activeTrade.Open > 20 {
-		s.activeTrade.CloseAt = b.Timestamp
-		s.activeTrade.Close = s.activeTrade.Open + 20
+	if s.activeTrade != nil && s.activeTrade.Direction == Long && b.High-s.activeTrade.OpenPrice > 20 {
+		s.activeTrade.CloseTime = b.Timestamp
+		s.activeTrade.ClosePrice = s.activeTrade.OpenPrice + 20
 		s.Trades = append(s.Trades, *s.activeTrade)
 		s.activeTrade = nil
 	}
-	if s.activeTrade != nil && s.activeTrade.Direction == Short && s.activeTrade.Open-b.Low > 20 {
-		s.activeTrade.CloseAt = b.Timestamp
-		s.activeTrade.Close = s.activeTrade.Open - 20
+	if s.activeTrade != nil && s.activeTrade.Direction == Short && s.activeTrade.OpenPrice-b.Low > 20 {
+		s.activeTrade.CloseTime = b.Timestamp
+		s.activeTrade.ClosePrice = s.activeTrade.OpenPrice - 20
 		s.Trades = append(s.Trades, *s.activeTrade)
 		s.activeTrade = nil
 	}
@@ -119,12 +119,12 @@ func (s *SRS) PrintStats() {
 	}
 
 	fmt.Printf("%d trades\n", len(s.Trades))
-	fmt.Printf("%s to %s\n", s.Trades[0].OpenAt, s.Trades[len(s.Trades)-1].CloseAt)
+	fmt.Printf("%s to %s\n", s.Trades[0].OpenTime, s.Trades[len(s.Trades)-1].CloseTime)
 	fmt.Printf("Percent win: %f\n", float64(profitable)/float64(len(s.Trades)))
 	fmt.Printf("Stopped out: %d\n", stops)
 	fmt.Printf("Total profit: %f\n", profit)
 	//for _, t := range s.Trades {
-	//	println(t.Open, t.Close, t.Stop, t.Direction, t.Close-t.Open)
+	//	println(t.OpenPrice, t.ClosePrice, t.StopPrice, t.Direction, t.ClosePrice-t.OpenPrice)
 	//}
 }
 

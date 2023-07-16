@@ -12,7 +12,7 @@ These periods appear to have the highest ATR values, indicating the highest vola
 
 Early Morning (around 00:15 to 02:15): This period starts from 00:15, peaking at 00:15 with an ATR of 14.061576. It seems to decrease after 02:15.
 Market Opening (around 07:00 to 10:00): This period begins from 07:00, reaching a peak at 09:00 with an ATR of 16.604735. After 10:00, the volatility appears to decrease.
-Market Close (around 14:30 to 16:00): This period starts around 14:30, peaking at 15:30 with an ATR of 14.160358 and at 16:00 with an ATR of 14.092212. The volatility seems to start decreasing after 16:00.
+Market ClosePrice (around 14:30 to 16:00): This period starts around 14:30, peaking at 15:30 with an ATR of 14.160358 and at 16:00 with an ATR of 14.092212. The volatility seems to start decreasing after 16:00.
 
 Bucket 00:00: 0.000000
 Bucket 00:15: 14.061576

@@ -5,12 +5,13 @@ import (
 	"log"
 	"strings"
 
+	"github.com/mwlazlo/srs/internal"
 	"github.com/mwlazlo/srs/internal/pp"
 )
 
 func main() {
 
-	ctx := pp.GetGracefulCtx()
+	ctx := internal.GetGracefulCtx()
 
 	db, err := pp.NewFileDB(ctx, "peak-profits")
 	if err != nil {

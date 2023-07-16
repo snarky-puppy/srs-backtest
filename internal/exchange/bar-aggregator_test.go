@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/mwlazlo/srs/internal/pp"
 )
 
 func TestProcessTick(t *testing.T) {
@@ -12,13 +14,13 @@ func TestProcessTick(t *testing.T) {
 	// Initialize BarAggregator
 	ba := &BarAggregator{
 		duration: duration,
-		tickChan: make(chan *Tick),
-		barChan:  make(chan *Bar),
+		tickChan: make(chan *pp.Tick),
+		barChan:  make(chan *pp.Bar),
 		bar:      nil,
 	}
 
 	// Mock ticks
-	ticks := []*Tick{
+	ticks := []*pp.Tick{
 		{Timestamp: time.Date(2023, 7, 13, 10, 0, 0, 0, time.UTC), Buy: 100, Sell: 105}, // 102.5
 		{Timestamp: time.Date(2023, 7, 13, 10, 3, 0, 0, time.UTC), Buy: 101, Sell: 106}, // 103.5
 		{Timestamp: time.Date(2023, 7, 13, 10, 5, 0, 0, time.UTC), Buy: 102, Sell: 107}, // 104.5
@@ -29,7 +31,7 @@ func TestProcessTick(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var bars []*Bar
+	var bars []*pp.Bar
 
 	// Start the bar aggregator
 	go ba.run(ctx)

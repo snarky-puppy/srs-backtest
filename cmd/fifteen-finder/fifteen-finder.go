@@ -189,8 +189,8 @@ func (s *Strategy) runTrades() {
 			return
 		}
 		for _, trade := range trades {
-			trade.Close = bar.Close
-			trade.CloseAt = bar.Timestamp
+			trade.ClosePrice = bar.Close
+			trade.CloseTime = bar.Timestamp
 			trade.CloseAtBar = bar
 			trade.CloseAtIdx = idx
 			trade.CloseReason = "end of life"
@@ -430,7 +430,7 @@ func considerAddingToPosition(i int, winner *pp.Trade, bar *pp.Bar, signal *pp.S
 	//	}
 	//}
 
-	newTrade := pp.NewTrade(winner.Direction, reachedTarget, winner.Stop, winner.Target, i, bar, signal, "add to position")
+	newTrade := pp.NewTrade(winner.Direction, reachedTarget, winner.StopPrice, winner.Target, i, bar, signal, "add to position")
 	newTrade.AutoAdjustStop = true
 	newTrade.DisableLoserCheck = true
 	newTrade.IsAdditional = true
@@ -442,8 +442,8 @@ func manageTrade(i int, trade *pp.Trade, bar *pp.Bar, signal *pp.Signal) *pp.Tra
 	trade.BarCnt++
 
 	closeTrade := func(reason string, price float64) *pp.Trade {
-		trade.Close = price
-		trade.CloseAt = bar.Timestamp
+		trade.ClosePrice = price
+		trade.CloseTime = bar.Timestamp
 		trade.CloseAtBar = bar
 		trade.CloseAtIdx = i
 		trade.CloseReason = trade.TradeCloseMsg(reason)
@@ -456,10 +456,10 @@ func manageTrade(i int, trade *pp.Trade, bar *pp.Bar, signal *pp.Signal) *pp.Tra
 
 	// region normal stopped out
 	switch {
-	case trade.Direction == pp.Long && bar.Low <= trade.Stop:
-		return closeTrade("stop", trade.Stop-slippage())
-	case trade.Direction == pp.Short && bar.High >= trade.Stop:
-		return closeTrade("stop", trade.Stop+slippage())
+	case trade.Direction == pp.Long && bar.Low <= trade.StopPrice:
+		return closeTrade("stop", trade.StopPrice-slippage())
+	case trade.Direction == pp.Short && bar.High >= trade.StopPrice:
+		return closeTrade("stop", trade.StopPrice+slippage())
 	}
 	// endregion
 
@@ -471,12 +471,12 @@ func manageTrade(i int, trade *pp.Trade, bar *pp.Bar, signal *pp.Signal) *pp.Tra
 		switch trade.Direction {
 		case pp.Long:
 			// trail by 15 pts
-			if bar.Low > trade.Stop+TrailStopPoints {
-				trade.AdjustStop(trade.Stop+TrailStopPoints, i, bar)
+			if bar.Low > trade.StopPrice+TrailStopPoints {
+				trade.AdjustStop(trade.StopPrice+TrailStopPoints, i, bar)
 			}
 		case pp.Short:
-			if bar.High < trade.Stop-TrailStopPoints {
-				trade.AdjustStop(trade.Stop-TrailStopPoints, i, bar)
+			if bar.High < trade.StopPrice-TrailStopPoints {
+				trade.AdjustStop(trade.StopPrice-TrailStopPoints, i, bar)
 			}
 		}
 	}
@@ -646,8 +646,8 @@ func (s *Strategy) httpserver(bars pp.Series) http.HandlerFunc {
 			opt = append(opt,
 				charts.WithMarkAreaDataItem(
 					opts.MarkAreaDataItem{
-						YAxis: trade.Open,
-						XAxis: trade.OpenAt,
+						YAxis: trade.OpenPrice,
+						XAxis: trade.OpenTime,
 						ItemStyle: &opts.ItemStyle{
 							BorderColor: "rgba(255, 0, 0, 0.3)",
 							BorderWidth: 1,
@@ -665,15 +665,15 @@ func (s *Strategy) httpserver(bars pp.Series) http.HandlerFunc {
 		//for _, trade := range signal.Trades {
 		//var high opts.MarkPointDataItem
 		//if trade.Direction == pp.Long && trade.HighAfterBars != 0 {
-		//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("High +%0.2f", trade.High-trade.Open))
+		//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("High +%0.2f", trade.High-trade.OpenPrice))
 		//}
 		//if trade.Direction == pp.Short && trade.HighAfterBars != 0 {
-		//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("Low +%0.2f", trade.Open-trade.High))
+		//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("Low +%0.2f", trade.OpenPrice-trade.High))
 		//}
 		//opt = append(opt, charts.WithMarkPointDataItem(
 		//	high,
-		//	lArrow(trade.Open, trade.OpenAt, "Entry "+trade.Direction.String()),
-		//	lArrow(trade.Close, trade.CloseAt, fmt.Sprintf("Exit %0.2f (%s)", trade.Profit(), trade.CloseReason)),
+		//	lArrow(trade.OpenPrice, trade.OpenTime, "Entry "+trade.Direction.String()),
+		//	lArrow(trade.ClosePrice, trade.CloseTime, fmt.Sprintf("Exit %0.2f (%s)", trade.Profit(), trade.CloseReason)),
 		//))
 
 		// track stop
@@ -722,8 +722,8 @@ func (s *Strategy) httpserver(bars pp.Series) http.HandlerFunc {
 		summary.WriteString(fmt.Sprintln("<tr><th>signal</th>", td(signal.Bar.Timestamp.Format("15:04")), td(signal.Bar.High), td(signal.Bar.Low), "<td></td><td></td></tr>"))
 		summary.WriteString("<tr><th></th><th>Index</th><th>Time</th><th>Price</th><th>Dir/Result</th><th>Reason</th>")
 		for _, trade := range signal.Trades {
-			summary.WriteString(fmt.Sprintln("<tr><th>entry</th>", td(trade.OpenAtIdx), td(trade.OpenAt.Format("15:04")), td(trade.Open), td(trade.Direction), td(trade.Reason), "</tr>"))
-			summary.WriteString(fmt.Sprintln("<tr><th>exit</th>", td(trade.CloseAtIdx), td(trade.CloseAt.Format("15:04")), td(trade.Close), td(trade.Profit()), td(trade.CloseReason), "</tr>"))
+			summary.WriteString(fmt.Sprintln("<tr><th>entry</th>", td(trade.OpenAtIdx), td(trade.OpenTime.Format("15:04")), td(trade.OpenPrice), td(trade.Direction), td(trade.Reason), "</tr>"))
+			summary.WriteString(fmt.Sprintln("<tr><th>exit</th>", td(trade.CloseAtIdx), td(trade.CloseTime.Format("15:04")), td(trade.ClosePrice), td(trade.Profit()), td(trade.CloseReason), "</tr>"))
 		}
 		summary.WriteString(fmt.Sprintf("<tr><th></th><th></th><th></th><th></th><th>%0.2f</th><th></th>", pl))
 		summary.WriteString("</table></pre>")

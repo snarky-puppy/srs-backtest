@@ -1,6 +1,7 @@
-package exchange
+package pp
 
 import (
+	"compress/gzip"
 	"encoding/csv"
 	"os"
 	"strconv"
@@ -33,7 +34,12 @@ func NewTickReader(filename string) (*TickReader, error) {
 	if err != nil {
 		return nil, err
 	}
-	reader := csv.NewReader(file)
+	gzr, err := gzip.NewReader(file)
+	if err != nil {
+		return nil, err
+	}
+	defer gzr.Close()
+	reader := csv.NewReader(gzr)
 	_, _ = reader.Read() // skip header
 	return &TickReader{file: file, reader: reader}, nil
 }

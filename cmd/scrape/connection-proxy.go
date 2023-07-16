@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/mwlazlo/srs/internal"
 	"github.com/mwlazlo/srs/internal/pp"
 )
 
@@ -42,7 +43,7 @@ func (c *ConnectionProxy) ConnectLoop() {
 		for {
 			log.Println(3)
 			select {
-			case <-pp.GetGracefulCtx().Done():
+			case <-internal.GetGracefulCtx().Done():
 				return
 			case <-done:
 				log.Println("Connection closed, reconnecting")

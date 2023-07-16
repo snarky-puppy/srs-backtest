@@ -5,32 +5,27 @@ import (
 	"errors"
 	"io"
 	"time"
+
+	"github.com/mwlazlo/srs/internal/pp"
 )
 
 type Strategy interface {
-	FiveMinBar(bar *Bar)
-}
-
-type Trade struct {
-	OpenTime  time.Time
-	OpenPrice float64
-
-	StopPrice float64
-	StopTime  time.Time
-
-	Qty float64
+	FiveMinBar(bar *pp.Bar)
+	TradeStoppedOut(trade *pp.Trade)
+	TradeOpened(trade *pp.Trade)
+	SetExchange(exch *Exchange)
 }
 
 type Exchange struct {
-	reader     *TickReader
+	reader     *pp.TickReader
 	aggregator *BarAggregator
+	Trades     *TradeManager
 	strategy   Strategy
-	openTrades []*Trade
 	done       chan struct{}
 }
 
 func NewExchange(ctx context.Context, file string, s Strategy) *Exchange {
-	reader, err := NewTickReader(file)
+	reader, err := pp.NewTickReader(file)
 	if err != nil {
 		panic(err)
 	}
@@ -39,9 +34,11 @@ func NewExchange(ctx context.Context, file string, s Strategy) *Exchange {
 		strategy:   s,
 		done:       make(chan struct{}),
 		aggregator: NewBarAggregator(ctx, time.Minute*5),
+		Trades:     NewTradeManager(ctx, s),
 	}
 	go rv.tickReader(ctx)
 	go rv.fiveMinBarReader()
+	s.SetExchange(rv)
 	return rv
 }
 
@@ -64,6 +61,7 @@ func (e *Exchange) tickReader(ctx context.Context) {
 				panic(err)
 			}
 			e.aggregator.AddTick(tick)
+			e.Trades.addTick(tick)
 		}
 	}
 }

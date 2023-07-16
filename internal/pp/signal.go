@@ -1,44 +1,77 @@
 package pp
 
-import (
-	"context"
-	"log"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
+import "time"
+
+const (
+	TargetPoints = 20
 )
 
-var (
-	ctx    context.Context
-	cancel context.CancelFunc
-	once   sync.Once
-)
+type Signal struct {
+	// the 15 minute bar
+	Bar         *Bar
+	BarDuration time.Duration
+	Idx         int // first bar of the 3 signal bars
 
-func initSig() {
-	var (
-		sigC chan os.Signal
-	)
-	ctx, cancel = context.WithCancel(context.Background())
-
-	sigC = make(chan os.Signal)
-	signal.Notify(sigC, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		defer cancel()
-		sig := <-sigC
-		log.Printf("received signal %s\n", sig)
-		signal.Reset()
-	}()
+	Trades     []*Trade
+	CanTradeFn func(Signal, Direction) bool
 }
 
-// GetGracefulCtx returns a context which is cancelled when the process receives a signal
-func GetGracefulCtx() context.Context {
-	once.Do(initSig)
-	return ctx
+// High returns higher signal breakout with increasing number of trades
+func (s Signal) High() float64 {
+	return s.Bar.High + 3.0 + (float64(len(s.Trades)) * 2.0)
 }
 
-// CancelContext manually cancels the context
-func CancelContext() {
-	cancel()
+// Low returns lower signal breakout with increasing number of trades
+func (s Signal) Low() float64 {
+	return s.Bar.Low - 3.0 - (float64(len(s.Trades)) * 2.0)
+}
+
+func (s Signal) CanTrade(direction Direction) bool {
+	if s.CanTradeFn != nil {
+		return s.CanTradeFn(s, direction)
+	}
+	return len(s.Trades) == 0
+}
+
+func (s Signal) EndsAt() time.Time {
+	// subtract the 5 minute duration of the starting bar or we end up with too big a end time
+	return s.Bar.Timestamp.Add(s.BarDuration - (5 * time.Minute))
+}
+
+func (s *Signal) NewTrade(direction Direction) *Trade {
+	return NewTrade(direction, s.Entry(direction), s.Stop(direction), s.Target(direction), 0, nil, s, "srs crossover")
+}
+
+func (s *Signal) Target(direction Direction) float64 {
+	switch direction {
+	case Long:
+		return s.Entry(direction) + TargetPoints
+	case Short:
+		return s.Entry(direction) - TargetPoints
+	default:
+		panic("invalid direction")
+	}
+}
+
+func (s *Signal) Stop(direction Direction) float64 {
+	// win rate 33-36%
+	// total profit: 10555
+	//return (bar.High + bar.Low) / 2
+
+	// win rate: 41-44%
+	// total profit: 12257
+	if direction == Long {
+		return s.Bar.Low
+	}
+	return s.Bar.High
+}
+
+func (s *Signal) Entry(direction Direction) float64 {
+	switch direction {
+	case Long:
+		return s.High()
+	case Short:
+		return s.Low()
+	}
+	panic("invalid direction")
 }

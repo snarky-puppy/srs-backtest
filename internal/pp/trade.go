@@ -55,8 +55,8 @@ func NewTrade(direction Direction, open, stop, target float64, index int, bar *B
 	//}
 
 	return &Trade{
-		Open: open,
-		Stop: stop,
+		OpenPrice: open,
+		StopPrice: stop,
 		StopLog: []*StopLog{{
 			Stop:      stop,
 			Idx:       index,
@@ -65,7 +65,7 @@ func NewTrade(direction Direction, open, stop, target float64, index int, bar *B
 		Target:    target,
 		Direction: direction,
 		OpenAtBar: bar,
-		OpenAt:    bar.Timestamp,
+		OpenTime:  bar.Timestamp,
 		OpenAtIdx: index,
 		High: func() float64 {
 			if direction == Long {
@@ -80,14 +80,16 @@ func NewTrade(direction Direction, open, stop, target float64, index int, bar *B
 }
 
 type Trade struct {
+	Id                      int
 	Direction               Direction
-	Stop                    float64
-	Open                    float64
-	OpenAt                  time.Time
+	Qty                     float64
+	StopPrice               float64
+	OpenPrice               float64
+	OpenTime                time.Time
 	OpenAtBar               *Bar
 	OpenAtIdx               int
-	Close                   float64
-	CloseAt                 time.Time
+	ClosePrice              float64
+	CloseTime               time.Time
 	CloseAtBar              *Bar
 	CloseAtIdx              int
 	High                    float64 // highest (or lowest if short) price reached
@@ -111,22 +113,22 @@ type Trade struct {
 
 func (t *Trade) Profit() float64 {
 	if t.Direction == Long {
-		return t.Close - t.Open
+		return t.ClosePrice - t.OpenPrice
 	} else {
-		return t.Open - t.Close
+		return t.OpenPrice - t.ClosePrice
 	}
 }
 
 func (t *Trade) IsStoppedOut(b Bar) bool {
 	if t.Direction == Long {
-		return b.Low < t.Stop
+		return b.Low < t.StopPrice
 	} else {
-		return b.High > t.Stop
+		return b.High > t.StopPrice
 	}
 }
 
 func (t *Trade) WasStoppedOutForZero() bool {
-	return t.Close == t.Stop
+	return t.ClosePrice == t.StopPrice
 }
 
 func (t *Trade) PlotStopLine(bars Series, dataIdx int) (stopLine []opts.KlineData) {
@@ -156,9 +158,9 @@ func (t *Trade) PlotStopLine(bars Series, dataIdx int) (stopLine []opts.KlineDat
 			switch {
 			//case stopIdx == 0 && i+1 < len(bars) && bars[i+1].Timestamp.Equal(t.StopLog[stopIdx].Timestamp):
 				// add an extra stop line for the open
-				//stopLine = append(stopLine, opts.KlineData{Value: fmt.Sprintf("%.2f", t.StopLog[stopIdx].Stop)})
+				//stopLine = append(stopLine, opts.KlineData{Value: fmt.Sprintf("%.2f", t.StopLog[stopIdx].StopPrice)})
 			case stopIdx < len(t.StopLog) && bars[i].Timestamp.Equal(t.StopLog[stopIdx].Timestamp):
-				curStop = t.StopLog[stopIdx].Stop
+				curStop = t.StopLog[stopIdx].StopPrice
 				stopLine = append(stopLine, opts.KlineData{Value: fmt.Sprintf("%.2f", curStop)})
 				stopIdx++
 			case stopIdx > 0 && stopIdx < len(t.StopLog):
@@ -206,7 +208,7 @@ func (t *Trade) TradeCloseMsg(raison string) string {
 
 func (t *Trade) CheckLoser(bar *Bar) {
 	/*
-		1. Close losing trades early: if the trade is in loss for too long, 3-5 bars in, close the trade
+		1. ClosePrice losing trades early: if the trade is in loss for too long, 3-5 bars in, close the trade
 			 (dubbed "sunken" - bar's high is still a loss)
 			- long: the high is under the trigger for 3 bars -- close
 			- short: the low is over the trigger for 3 bars -- close
@@ -235,13 +237,13 @@ func (t *Trade) CheckLoser(bar *Bar) {
 		return
 	}
 
-	isStraddle := bar.High > t.Open && bar.Low < t.Open
+	isStraddle := bar.High > t.OpenPrice && bar.Low < t.OpenPrice
 	isSunken := false
 	switch t.Direction {
 	case Long:
-		isSunken = bar.High < t.Open
+		isSunken = bar.High < t.OpenPrice
 	case Short:
-		isSunken = bar.Low > t.Open
+		isSunken = bar.Low > t.OpenPrice
 	}
 
 	if isSunken && isStraddle {
@@ -263,16 +265,16 @@ func (t *Trade) CheckLoser(bar *Bar) {
 	if t.IsLoser() {
 		switch t.Direction {
 		case Long:
-			t.Target = t.Open
-			t.Stop = math.Max(t.Stop, bar.Low+3)
+			t.Target = t.OpenPrice
+			t.StopPrice = math.Max(t.StopPrice, bar.Low+3)
 		case Short:
-			t.Target = t.Open
-			t.Stop = math.Min(t.Stop, bar.High+3)
+			t.Target = t.OpenPrice
+			t.StopPrice = math.Min(t.StopPrice, bar.High+3)
 		}
 	}
 }
 
-func (t *Trade) AdjustStop(f float64, i int, bar *Bar) {
-	t.Stop = f
-	t.StopLog = append(t.StopLog, &StopLog{Timestamp: bar.Timestamp, Stop: f, Idx: i})
+func (t *Trade) AdjustStop(price float64, i int, bar *Bar) {
+	t.StopPrice = price
+	t.StopLog = append(t.StopLog, &StopLog{Timestamp: bar.Timestamp, Stop: price, Idx: i})
 }
