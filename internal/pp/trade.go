@@ -57,22 +57,16 @@ func NewTrade(direction Direction, open, stop, target float64, index int, bar *B
 	return &Trade{
 		OpenPrice: open,
 		StopPrice: stop,
-		StopLog: []*StopLog{{
-			Stop:      stop,
-			Idx:       index,
-			Timestamp: bar.Timestamp,
-		}},
+		//StopLog: []*StopLog{{
+		//	Stop:      stop,
+		//	Idx:       index,
+		//	Timestamp: bar.Timestamp,
+		//}},
 		Target:    target,
 		Direction: direction,
-		OpenAtBar: bar,
-		OpenTime:  bar.Timestamp,
-		OpenAtIdx: index,
-		High: func() float64 {
-			if direction == Long {
-				return bar.High
-			}
-			return bar.Low
-		}(),
+		//OpenAtBar:      bar,
+		//OpenTime:       bar.Timestamp,
+		OpenAtIdx:      index,
 		Signal:         signal,
 		AutoAdjustStop: false,
 		Reason:         reason,
@@ -109,6 +103,7 @@ type Trade struct {
 	Reason                  string
 	CanAddToPosition        bool
 	IsAdditional            bool
+	OrderTime               time.Time
 }
 
 func (t *Trade) Profit() float64 {
@@ -277,4 +272,10 @@ func (t *Trade) CheckLoser(bar *Bar) {
 func (t *Trade) AdjustStop(price float64, i int, bar *Bar) {
 	t.StopPrice = price
 	t.StopLog = append(t.StopLog, &StopLog{Timestamp: bar.Timestamp, Stop: price, Idx: i})
+}
+
+func (t *Trade) CloseTrade(price float64, tstamp time.Time, reason string) {
+	t.ClosePrice = price
+	t.CloseReason = reason
+	t.CloseTime = tstamp
 }

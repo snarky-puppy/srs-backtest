@@ -26,6 +26,7 @@ func (b *Bar) Copy() *Bar {
 		High:      b.High,
 		Low:       b.Low,
 		Close:     b.Close,
+		Duration:  b.Duration,
 	}
 }
 
@@ -68,6 +69,10 @@ func (b *Bar) AddTick(t *Tick) {
 		b.Low = midPrice
 	}
 	b.lastPrice = midPrice
+}
+
+func (b *Bar) ClosingTime() time.Time {
+	return b.Timestamp.Add(b.Duration)
 }
 
 func NewBar(duration time.Duration) *Bar {

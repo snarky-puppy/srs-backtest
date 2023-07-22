@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"encoding/csv"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 
@@ -141,6 +142,27 @@ func (s Series) SignalContext(signal *Signal) (idx int, rv Series) {
 		rv = append(rv, s[i])
 	}
 	return start, rv
+}
+
+func (s Series) SignalContext2(signal *Signal) (rv Series) {
+	start := signal.Bar.Timestamp.Add(-(2 * signal.Bar.Duration))
+	var end = start.Add(1 * time.Hour)
+	if len(signal.Trades) > 0 {
+		for _, t := range signal.Trades {
+			if t.CloseTime.After(end) {
+				end = t.CloseTime.Add(30 * time.Minute)
+			}
+		}
+	}
+
+	// find index of start, use binary search
+	startIdx := sort.Search(len(s), func(i int) bool {
+		return s[i].Timestamp.After(start)
+	})
+	endIdx := sort.Search(len(s), func(i int) bool {
+		return s[i].Timestamp.After(end)
+	})
+	return s[startIdx:endIdx]
 }
 
 func ReadBarsFromCSV(filename string, useLocalTz bool) (Series, error) {

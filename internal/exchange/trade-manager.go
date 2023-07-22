@@ -1,102 +1,84 @@
 package exchange
 
 import (
-	"context"
+	"time"
 
 	"github.com/mwlazlo/srs/internal/pp"
 )
 
-// create a new trade when nTicks == 0
-// simulates the async-ness of a real exchange
-type newTradeSim struct {
-	nTicks int
-	trade  *pp.Trade
+type TradeCloseReason int
+
+const (
+	StopLossHit TradeCloseReason = iota
+	ProfitTargetHit
+	TradeClosedManually
+)
+
+func (r TradeCloseReason) String() string {
+	switch r {
+	case StopLossHit:
+		return "StopLossHit"
+	case ProfitTargetHit:
+		return "ProfitTargetHit"
+	case TradeClosedManually:
+		return "TradeClosedManually"
+	}
+	return "Unknown"
+}
+
+type EntryScanner = func(history *pp.History, tradeManager *TradeManager)
+
+type exchange interface {
+	CreateOrder(trade *ExTrade) *ExTrade
 }
 
 type TradeManager struct {
-	tickChan     chan *pp.Tick
-	openTrades   map[int]*pp.Trade
-	closedTrades map[int]*pp.Trade
-	strategy     Strategy
-	newTradeChan chan *pp.Trade
+	aggregator    *BarAggregator
+	exchange      exchange
+	entryScanners []EntryScanner
+	orders        []*pp.Trade
+	positions     []*pp.Trade
 }
 
-func (m *TradeManager) addTick(tick *pp.Tick) {
-	m.tickChan <- tick
+func (t *TradeManager) PositionClosed(trade *ExTrade) {
+	//TODO implement me
+	panic("implement me")
 }
 
-func (m *TradeManager) run(ctx context.Context) {
-	newTrades := []*newTradeSim{}
-	tradeId := 0
+func (t *TradeManager) PositionOpened(trade *ExTrade) {
+	//TODO implement me
+	panic("implement me")
+}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case newTrade := <-m.newTradeChan:
-			tradeId++
-			newTrade.Id = tradeId
-			newTrades = append(newTrades, &newTradeSim{
-				nTicks: 2,
-				trade:  newTrade,
-			})
-		case tick := <-m.tickChan:
-			// check for stop loss
-			for _, trade := range m.openTrades {
-				p := tick.MidPrice()
-				switch trade.Direction {
-				case pp.Long:
-					if p <= trade.StopPrice {
-						m.StoppedOut(trade, tick)
-					}
-				case pp.Short:
-					if p >= trade.StopPrice {
-						m.StoppedOut(trade, tick)
-					}
-				}
-			}
-
-			// check for new trades
-			putBack := []*newTradeSim{}
-			for _, newTrade := range newTrades {
-				newTrade.nTicks--
-				if newTrade.nTicks == 0 {
-					trade := newTrade.trade
-					trade.OpenTime = tick.Timestamp
-					trade.OpenPrice = tick.MidPrice()
-					m.openTrades[trade.Id] = trade
-					m.strategy.TradeOpened(trade)
-				} else {
-					putBack = append(putBack, newTrade)
-				}
-			}
-			newTrades = putBack
-
-			// check for new take profit
-			// check for closing trades
+func (t *TradeManager) HandleTick(tick *pp.Tick) {
+	bar := t.aggregator.processTick(tick)
+	if bar != nil {
+		for _, scanner := range t.entryScanners {
+			scanner(bar.History, t)
 		}
 	}
 }
 
-func (m TradeManager) CreateTrade(trade *pp.Trade) {
-	m.newTradeChan <- trade
-}
-
-func (m *TradeManager) StoppedOut(trade *pp.Trade, tick *pp.Tick) {
-	trade.ClosePrice = tick.MidPrice()
-	trade.CloseReason = "stop"
-	m.closedTrades[trade.Id] = trade
-	delete(m.openTrades, trade.Id)
-	m.strategy.TradeStoppedOut(trade)
-}
-
-func NewTradeManager(ctx context.Context, strategy Strategy) *TradeManager {
+func NewTradeManager(scanners ...EntryScanner) *TradeManager {
 	rv := &TradeManager{
-		tickChan:     make(chan *pp.Tick),
-		openTrades:   make(map[int]*pp.Trade),
-		closedTrades: make(map[int]*pp.Trade),
-		strategy:     strategy,
+		aggregator:    NewBarAggregator(time.Minute * 5),
+		entryScanners: scanners,
 	}
-	go rv.run(ctx)
 	return rv
+}
+
+func (t *TradeManager) SetExchange(exchange exchange) {
+	t.exchange = exchange
+}
+
+func (t *TradeManager) AddSignal(signal *pp.Signal) {
+	if t.activeSignal != nil {
+		panic("active signal already exists")
+	}
+	t.activeSignal = signal
+	t.history.AddSignal(signal)
+}
+
+func (t *TradeManager) CreateOrder(trade *pp.Trade) {
+
 }

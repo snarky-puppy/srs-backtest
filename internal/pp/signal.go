@@ -75,3 +75,7 @@ func (s *Signal) Entry(direction Direction) float64 {
 	}
 	panic("invalid direction")
 }
+
+func (s *Signal) AddPosition(trade *Trade) {
+	s.Trades = append(s.Trades, trade)
+}
