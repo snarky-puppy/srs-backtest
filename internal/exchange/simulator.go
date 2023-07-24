@@ -4,8 +4,6 @@ import (
 	"errors"
 	"io"
 	"time"
-
-	"github.com/mwlazlo/srs/internal/pp"
 )
 
 type ExTradeStatus int
@@ -13,13 +11,14 @@ type ExTradeStatus int
 const (
 	Order ExTradeStatus = iota
 	Position
+	Closed
 )
 
 // exchange idea of trade is much simpler than the strategy's idea of a trade
 type ExTrade struct {
 	Id          int
 	Status      ExTradeStatus
-	Direction   pp.Direction
+	Direction   Direction
 	OpenTime    time.Time
 	OpenPrice   float64
 	EntryTime   time.Time
@@ -32,13 +31,14 @@ type ExTrade struct {
 	Profit      float64
 }
 
-func (t *ExTrade) close(tick *pp.Tick, balance float64) (newBalance float64) {
+func (t *ExTrade) close(tick *Tick, balance float64) (newBalance float64) {
+	t.Status = Closed
 	t.ExitTime = tick.Timestamp
 	t.ExitPrice = tick.MidPrice()
 	switch t.Direction {
-	case pp.Long:
+	case Long:
 		t.Profit = t.ExitPrice - t.EntryPrice
-	case pp.Short:
+	case Short:
 		t.Profit = t.EntryPrice - t.ExitPrice
 	}
 	newBalance = balance + t.Profit
@@ -49,18 +49,28 @@ func (t *ExTrade) close(tick *pp.Tick, balance float64) (newBalance float64) {
 type handler interface {
 	PositionClosed(trade *ExTrade)
 	PositionOpened(trade *ExTrade)
-	OrderOpened(trade *ExTrade)
-	HandleTick(tick *pp.Tick)
+	HandleTick(tick *Tick)
 }
 
 type Simulator struct {
-	reader      *pp.TickReader // internally generate ticks, like a real exchange
+	reader      *TickReader // internally generate ticks, like a real exchange
 	positions   map[int]*ExTrade
 	orders      map[int]*ExTrade
 	tradeId     int
-	currentTick *pp.Tick
+	currentTick *Tick
 	handler     handler
 	balance     float64
+}
+
+func (s *Simulator) ExitPosition(id int) *ExTrade {
+	trade := s.positions[id]
+	s.closePosition(trade, s.currentTick)
+	delete(s.positions, id)
+	return trade
+}
+
+func (s *Simulator) CancelOrder(id int) {
+	delete(s.orders, id)
 }
 
 func (s *Simulator) ProcessTicks() {
@@ -86,7 +96,7 @@ func (s *Simulator) ProcessTicks() {
 	}
 }
 
-func (s *Simulator) addTick(tick *pp.Tick) {
+func (s *Simulator) addTick(tick *Tick) {
 
 	s.currentTick = tick
 
@@ -94,17 +104,17 @@ func (s *Simulator) addTick(tick *pp.Tick) {
 	for _, trade := range s.positions {
 		currentPrice := tick.MidPrice()
 		switch trade.Direction {
-		case pp.Long:
+		case Long:
 			if trade.StopPrice != 0 && currentPrice <= trade.StopPrice {
-				s.stoppedOut(trade, tick)
+				s.closePosition(trade, tick)
 			} else if trade.TargetPrice != 0 && currentPrice >= trade.TargetPrice {
-				s.takeProfit(trade, tick)
+				s.closePosition(trade, tick)
 			}
-		case pp.Short:
+		case Short:
 			if trade.StopPrice != 0 && currentPrice >= trade.StopPrice {
-				s.stoppedOut(trade, tick)
+				s.closePosition(trade, tick)
 			} else if trade.TargetPrice != 0 && currentPrice <= trade.TargetPrice {
-				s.takeProfit(trade, tick)
+				s.closePosition(trade, tick)
 			}
 		}
 	}
@@ -112,46 +122,49 @@ func (s *Simulator) addTick(tick *pp.Tick) {
 	// check if orders should be filled
 	for _, trade := range s.orders {
 		switch trade.Direction {
-		case pp.Long:
+		case Long:
 			if tick.MidPrice() >= trade.TargetPrice {
-				s.createPosition(trade, tick)
+				s.enterPosition(trade, tick)
 			}
-		case pp.Short:
+		case Short:
 			if tick.MidPrice() <= trade.TargetPrice {
-				s.createPosition(trade, tick)
+				s.enterPosition(trade, tick)
 			}
 		}
 	}
 }
 
-func (s *Simulator) CreateOrder(trade *ExTrade) *ExTrade {
+func (s *Simulator) CreateOrder(direction Direction, open, stop, target float64) *ExTrade {
 	s.tradeId++
-	trade.Id = s.tradeId
-	trade.OpenTime = s.currentTick.Timestamp
+	trade := &ExTrade{
+		Id:          s.tradeId,
+		Status:      Order,
+		Direction:   direction,
+		OpenPrice:   open,
+		OpenTime:    s.currentTick.Timestamp,
+		StopPrice:   stop,
+		TargetPrice: target,
+	}
 	s.orders[trade.Id] = trade
 	return trade
 }
 
-func (s *Simulator) createPosition(trade *ExTrade, tick *pp.Tick) {
+func (s *Simulator) enterPosition(trade *ExTrade, tick *Tick) {
 	trade.EntryTime = tick.Timestamp
+	trade.EntryPrice = tick.MidPrice()
+	trade.Status = Position
 	delete(s.orders, trade.Id)
 	s.positions[trade.Id] = trade
 	s.handler.PositionOpened(trade)
 }
 
-func (s *Simulator) stoppedOut(trade *ExTrade, tick *pp.Tick) {
+func (s *Simulator) closePosition(trade *ExTrade, tick *Tick) {
 	s.balance = trade.close(tick, s.balance)
 	delete(s.positions, trade.Id)
 	s.handler.PositionClosed(trade)
 }
 
-func (s *Simulator) takeProfit(trade *ExTrade, tick *pp.Tick) {
-	s.balance = trade.close(tick, s.balance)
-	delete(s.positions, trade.Id)
-	s.handler.PositionClosed(trade)
-}
-
-/*func (s *Simulator) CloseAllPositions(bar *pp.Bar) {
+/*func (s *Simulator) CloseAllPositions(bar *Bar) {
 	for _, trade := range s.positions {
 		trade.Close(tick)
 		s.handler.TradeClosed(trade)
@@ -167,7 +180,7 @@ func (s *Simulator) CloseAllOrders() {
 */
 
 func NewExchangeSimulator(file string, handler handler) *Simulator {
-	reader, err := pp.NewTickReader(file)
+	reader, err := NewTickReader(file)
 	if err != nil {
 		panic(err)
 	}

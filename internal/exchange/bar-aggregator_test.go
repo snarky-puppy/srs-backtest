@@ -1,11 +1,8 @@
 package exchange
 
 import (
-	"context"
 	"testing"
 	"time"
-
-	"github.com/mwlazlo/srs/internal/pp"
 )
 
 func TestProcessTick(t *testing.T) {
@@ -14,49 +11,26 @@ func TestProcessTick(t *testing.T) {
 	// Initialize BarAggregator
 	ba := &BarAggregator{
 		duration: duration,
-		tickChan: make(chan *pp.Tick),
-		barChan:  make(chan *pp.Bar),
 		bar:      nil,
 	}
 
 	// Mock ticks
-	ticks := []*pp.Tick{
+	ticks := []*Tick{
 		{Timestamp: time.Date(2023, 7, 13, 10, 0, 0, 0, time.UTC), Buy: 100, Sell: 105}, // 102.5
 		{Timestamp: time.Date(2023, 7, 13, 10, 3, 0, 0, time.UTC), Buy: 101, Sell: 106}, // 103.5
 		{Timestamp: time.Date(2023, 7, 13, 10, 5, 0, 0, time.UTC), Buy: 102, Sell: 107}, // 104.5
 		//{Timestamp: time.Date(2023, 7, 13, 10, 6, 0, 0, time.UTC), Buy: 102, Sell: 107},
 	}
 
-	// Create a context to stop the bar aggregator
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	var bars []*Bar
 
-	var bars []*pp.Bar
-
-	// Start the bar aggregator
-	go ba.run(ctx)
-
-	go func() {
-		for {
-			bar, ok := ba.NextBar()
-			if !ok {
-				return
-			}
+	for _, tick := range ticks {
+		bar := ba.ProcessTick(tick)
+		if bar != nil {
 			bars = append(bars, bar)
 			t.Logf("bar: %v", bar)
 		}
-	}()
-
-	// Send the ticks to the bar aggregator
-	for _, tick := range ticks {
-		ba.AddTick(tick)
 	}
-
-	ba.Close()
-
-	// Wait for the bar aggregator to process the ticks and create bars
-	time.Sleep(time.Second)
-	cancel()
 
 	// We expect two bars, since the third tick should start a new bar
 	if len(bars) != 2 {

@@ -3,23 +3,21 @@ package exchange
 import (
 	"log"
 	"time"
-
-	"github.com/mwlazlo/srs/internal/pp"
 )
 
 type BarAggregator struct {
 	duration time.Duration
-	bar      *pp.Bar
+	bar      *Bar
 }
 
-func (b *BarAggregator) processTick(tick *pp.Tick) (rv *pp.Bar) {
+func (b *BarAggregator) ProcessTick(tick *Tick) (rv *Bar) {
 	if tick == nil && b.bar != nil {
 		b.bar.CloseBar(nil)
 		rv = b.bar
 		return
 	}
 	if b.bar == nil {
-		b.bar = pp.NewBar(b.duration)
+		b.bar = NewBar(b.duration)
 		b.bar.OpenBar(tick)
 	} else {
 		// if the tick is before the current bar, log and ignore
@@ -31,7 +29,7 @@ func (b *BarAggregator) processTick(tick *pp.Tick) (rv *pp.Bar) {
 		if tick.BaseTime(b.duration) != b.bar.Timestamp {
 			b.bar.CloseBar(tick)
 			rv = b.bar
-			b.bar = pp.NewBar(b.duration)
+			b.bar = NewBar(b.duration)
 			b.bar.OpenBar(tick)
 		} else {
 			b.bar.AddTick(tick)
