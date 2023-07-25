@@ -1,7 +1,6 @@
 package exchange
 
 import (
-	"fmt"
 	"log"
 	"time"
 )
@@ -40,8 +39,9 @@ type TradeManager struct {
 	history       *History
 }
 
-func (t *TradeManager) PositionClosed(trade *ExTrade) {
-	fmt.Println(trade.Direction, trade.EntryTime.Format(ShortDt), trade.EntryPrice, trade.ExitTime.Format(ShortTime), trade.ExitPrice, trade.Profit, trade.Balance)
+func (t *TradeManager) PositionClosed(exTrade *ExTrade) {
+	trade := t.positions[exTrade.Id]
+	trade.updateClosed(exTrade)
 	tracked := t.positions[trade.Id]
 	if tracked == nil {
 		log.Printf("position not found: %+v", trade)
@@ -119,7 +119,7 @@ func (t *TradeManager) PrintReport() {
 }
 
 func (t *TradeManager) SaveData(dir string) {
-
+	t.history.SaveData(dir)
 }
 
 func NewTradeManager(marketConfig MarketConfig, scanners ...EntryScanner) *TradeManager {

@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	TargetPoints = 20
+	TargetPoints = 200
 )
 
 type Signals []*Signal
@@ -13,7 +13,7 @@ type Signals []*Signal
 type Signal struct {
 	Bar        *Bar
 	Trades     []*Trade
-	CanTradeFn func(*Signal, Direction) bool
+	CanTradeFn func(*Signal, Direction) bool `json:"-"`
 }
 
 // High returns higher signal breakout with increasing number of trades
@@ -78,4 +78,16 @@ func (s *Signal) Entry(direction Direction) float64 {
 
 func (s *Signal) AddPosition(trade *Trade) {
 	s.Trades = append(s.Trades, trade)
+}
+
+func (s *Signal) EncodeableClone() *Signal {
+	newTrades := make([]*Trade, len(s.Trades))
+	for i, t := range s.Trades {
+		newTrades[i] = &(*t)
+		t.Signal = nil
+	}
+	return &Signal{
+		Bar:    s.Bar.Copy(),
+		Trades: newTrades,
+	}
 }

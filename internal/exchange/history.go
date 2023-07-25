@@ -1,17 +1,21 @@
 package exchange
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/go-echarts/go-echarts/v2/charts"
-	"github.com/go-echarts/go-echarts/v2/components"
 	"github.com/go-echarts/go-echarts/v2/opts"
 	"github.com/go-echarts/go-echarts/v2/types"
 )
+
+type HistoricalRecord struct {
+	Signal  *Signal
+	Context Series
+}
 
 type History struct {
 	signals []*Signal
@@ -60,6 +64,13 @@ func (h *History) PrintReport() {
 			intervals[k] = &winloss{}
 		}
 		for _, trade := range signal.Trades {
+			fmt.Println(
+				trade.Direction, "\t",
+				trade.EntryTime.Format(ShortDt),
+				trade.EntryPrice, "\t",
+				trade.ExitTime.Format(ShortTime), trade.ExitPrice, "\t",
+				trade.ExitReason, trade.Profit, trade.Balance)
+
 			if trade.Profit == 0 {
 				intervals[k].addEven()
 				all.addEven()
@@ -113,49 +124,68 @@ func (h *History) SaveData(path string) {
 			index = 0
 			lastDay = day
 		}
-		name := fmt.Sprintf("%s/%s-%d.html", path, day, index)
+		name := fmt.Sprintf("%s/%s-%d.json", path, day, index)
 		h.saveSignalData(signal, name)
 	}
 }
 
 func (h *History) saveSignalData(signal *Signal, fileName string) {
-
-	line := h.createLineChart(signal)
-
 	f, err := os.Create(fileName)
 	if err != nil {
 		panic(err)
 	}
+	defer f.Close()
 
-	page := components.NewPage()
-	//page.Initialization.AssetsHost = "/static/"
-	page.AddCharts(line)
-	err = page.Render(f)
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+
+	body := HistoricalRecord{
+		Signal:  signal.EncodeableClone(),
+		Context: h.bars.FilterDay(signal.Bar.Timestamp),
+	}
+
+	err = enc.Encode(body)
 	if err != nil {
 		panic(err)
 	}
+	/*
+		line := h.createLineChart(signal)
 
-	td := func(inner any) string {
-		return fmt.Sprint("<td>", inner, "</td>")
-	}
+		f, err := os.Create(fileName)
+		if err != nil {
+			panic(err)
+		}
 
-	var pl float64
-	for _, trade := range signal.Trades {
-		pl += trade.Profit
-	}
+		page := components.NewPage()
+		//page.Initialization.AssetsHost = "/static/"
+		page.AddCharts(line)
+		err = page.Render(f)
+		if err != nil {
+			panic(err)
+		}
 
-	summary := strings.Builder{}
-	summary.WriteString("<hr/><table border=1><tr>")
-	summary.WriteString(fmt.Sprintln("<tr><th>signal</th>", td(signal.Bar.Timestamp.Format("15:04")), td(signal.Bar.High), td(signal.Bar.Low), "<td></td><td></td></tr>"))
-	summary.WriteString("<tr><th></th><th>Time</th><th>Price</th><th>Dir/Result</th><th>Reason</th>")
-	for _, trade := range signal.Trades {
-		summary.WriteString(fmt.Sprintln("<tr><th>entry</th>", td(trade.OpenTime.Format("15:04")), td(trade.OpenPrice), td(trade.Direction), td(trade.OpenReason), "</tr>"))
-		summary.WriteString(fmt.Sprintln("<tr><th>exit</th>", td(trade.ExitTime.Format("15:04")), td(trade.ExitPrice), td(trade.Profit), td(trade.ExitReason), "</tr>"))
-	}
-	summary.WriteString(fmt.Sprintf("<tr><th></th><th></th><th></th><th></th><th>%0.2f</th><th></th>", pl))
-	summary.WriteString("</table>")
-	_, _ = f.Write([]byte(summary.String()))
-	_ = f.Close()
+		td := func(inner any) string {
+			return fmt.Sprint("<td>", inner, "</td>")
+		}
+
+		var pl float64
+		for _, trade := range signal.Trades {
+			pl += trade.Profit
+		}
+
+		summary := strings.Builder{}
+		summary.WriteString("<hr/><table border=1><tr>")
+		summary.WriteString(fmt.Sprintln("<tr><th>signal</th>", td(signal.Bar.Timestamp.Format("15:04")), td(signal.Bar.High), td(signal.Bar.Low), "<td></td><td></td></tr>"))
+		summary.WriteString("<tr><th></th><th>Time</th><th>Price</th><th>Dir/Result</th><th>Reason</th>")
+		for _, trade := range signal.Trades {
+			summary.WriteString(fmt.Sprintln("<tr><th>entry</th>", td(trade.OpenTime.Format("15:04")), td(trade.OpenPrice), td(trade.Direction), td(trade.OpenReason), "</tr>"))
+			summary.WriteString(fmt.Sprintln("<tr><th>exit</th>", td(trade.ExitTime.Format("15:04")), td(trade.ExitPrice), td(trade.Profit), td(trade.ExitReason), "</tr>"))
+		}
+		summary.WriteString(fmt.Sprintf("<tr><th></th><th></th><th></th><th></th><th>%0.2f</th><th></th>", pl))
+		summary.WriteString("</table>")
+		_, _ = f.Write([]byte(summary.String()))
+		_ = f.Close()
+	*/
 }
 
 func (h *History) createLineChart(signal *Signal) *charts.Kline {
@@ -197,24 +227,24 @@ func (h *History) createLineChart(signal *Signal) *charts.Kline {
 
 	var opt []charts.SeriesOpts
 
-	//lArrow := func(y float64, x time.Time, label string) opts.MarkPointDataItem {
-	//	return opts.MarkPointDataItem{
-	//		Value: label,
-	//		ItemStyle: &opts.ItemStyle{
-	//			Color:       "auto",
-	//			BorderColor: "black",
-	//		},
-	//		Label: &opts.Label{
-	//			Show:     true,
-	//			Position: "right",
-	//		},
-	//		Symbol:       "arrow",
-	//		SymbolRotate: 90,
-	//		SymbolSize:   10,
-	//		YAxis:        y,
-	//		XAxis:        x,
-	//	}
-	//}
+	lArrow := func(y float64, x time.Time, label string) opts.MarkPointDataItem {
+		return opts.MarkPointDataItem{
+			Value: label,
+			ItemStyle: &opts.ItemStyle{
+				Color:       "auto",
+				BorderColor: "black",
+			},
+			Label: &opts.Label{
+				Show:     true,
+				Position: "right",
+			},
+			Symbol:       "arrow",
+			SymbolRotate: 90,
+			SymbolSize:   10,
+			YAxis:        y,
+			XAxis:        x,
+		}
+	}
 
 	//rArrow := func(y float64, x time.Time, label string) opts.MarkPointDataItem {
 	//	return opts.MarkPointDataItem{
@@ -285,19 +315,19 @@ func (h *History) createLineChart(signal *Signal) *charts.Kline {
 
 	}
 
-	//for _, trade := range signal.Trades {
-	//var high opts.MarkPointDataItem
-	//if trade.Direction == pp.Long && trade.HighAfterBars != 0 {
-	//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("High +%0.2f", trade.High-trade.OpenPrice))
-	//}
-	//if trade.Direction == pp.Short && trade.HighAfterBars != 0 {
-	//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("Low +%0.2f", trade.OpenPrice-trade.High))
-	//}
-	//opt = append(opt, charts.WithMarkPointDataItem(
-	//	high,
-	//	lArrow(trade.OpenPrice, trade.OpenTime, "Entry "+trade.Direction.String()),
-	//	lArrow(trade.ClosePrice, trade.CloseTime, fmt.Sprintf("Exit %0.2f (%s)", trade.Profit(), trade.CloseReason)),
-	//))
+	for _, trade := range signal.Trades {
+		//var high opts.MarkPointDataItem
+		//if trade.Direction == Long && trade.HighAfterBars != 0 {
+		//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("High +%0.2f", trade.High-trade.OpenPrice))
+		//}
+		//if trade.Direction == Short && trade.HighAfterBars != 0 {
+		//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("Low +%0.2f", trade.OpenPrice-trade.High))
+		//}
+		opt = append(opt, charts.WithMarkPointDataItem(
+			lArrow(trade.OpenPrice, trade.OpenTime, "Entry "+trade.Direction.String()),
+			lArrow(trade.ExitPrice, trade.ExitTime.Truncate(5*time.Minute), fmt.Sprintf("Exit %0.2f (%s)", trade.Profit, trade.ExitReason)),
+		))
+	}
 
 	// track stop
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -66,8 +65,6 @@ func (s *SrsEntry) On5MinBar(history *exchange.History, tradeManager *exchange.T
 	}
 
 	t := bar.Timestamp.In(daxConfig.Timezone())
-
-	fmt.Println(t)
 
 	// setup srs signal
 	if daxConfig.isPeriod(t) {

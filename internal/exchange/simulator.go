@@ -4,6 +4,8 @@ import (
 	"errors"
 	"io"
 	"time"
+
+	"github.com/mwlazlo/srs/internal"
 )
 
 type ExTradeStatus int
@@ -37,29 +39,23 @@ func (t *ExTrade) close(tick *Tick, balance float64) (newBalance float64) {
 	t.ExitPrice = tick.MidPrice()
 	switch t.Direction {
 	case Long:
-		t.Profit = t.ExitPrice - t.EntryPrice
+		t.Profit = internal.Round4(t.ExitPrice - t.EntryPrice)
 	case Short:
-		t.Profit = t.EntryPrice - t.ExitPrice
+		t.Profit = internal.Round4(t.EntryPrice - t.ExitPrice)
 	}
-	newBalance = balance + t.Profit
+	newBalance = internal.Round4(balance + t.Profit)
 	t.Balance = newBalance
 	return
 }
 
-type handler interface {
-	PositionClosed(trade *ExTrade)
-	PositionOpened(trade *ExTrade)
-	HandleTick(tick *Tick)
-}
-
 type Simulator struct {
-	reader      *TickReader // internally generate ticks, like a real exchange
-	positions   map[int]*ExTrade
-	orders      map[int]*ExTrade
-	tradeId     int
-	currentTick *Tick
-	handler     handler
-	balance     float64
+	reader       *TickReader // internally generate ticks, like a real exchange
+	positions    map[int]*ExTrade
+	orders       map[int]*ExTrade
+	tradeId      int
+	currentTick  *Tick
+	tradeManager *TradeManager
+	balance      float64
 }
 
 func (s *Simulator) ExitPosition(id int) *ExTrade {
@@ -88,7 +84,7 @@ func (s *Simulator) ProcessTicks() {
 			s.addTick(tick)
 		}
 		// let the strategy handle the final tick as nil
-		s.handler.HandleTick(tick)
+		s.tradeManager.HandleTick(tick)
 
 		if finalLoop {
 			return
@@ -123,11 +119,11 @@ func (s *Simulator) addTick(tick *Tick) {
 	for _, trade := range s.orders {
 		switch trade.Direction {
 		case Long:
-			if tick.MidPrice() >= trade.TargetPrice {
+			if tick.MidPrice() >= trade.OpenPrice {
 				s.enterPosition(trade, tick)
 			}
 		case Short:
-			if tick.MidPrice() <= trade.TargetPrice {
+			if tick.MidPrice() <= trade.OpenPrice {
 				s.enterPosition(trade, tick)
 			}
 		}
@@ -155,19 +151,19 @@ func (s *Simulator) enterPosition(trade *ExTrade, tick *Tick) {
 	trade.Status = Position
 	delete(s.orders, trade.Id)
 	s.positions[trade.Id] = trade
-	s.handler.PositionOpened(trade)
+	s.tradeManager.PositionOpened(trade)
 }
 
 func (s *Simulator) closePosition(trade *ExTrade, tick *Tick) {
 	s.balance = trade.close(tick, s.balance)
 	delete(s.positions, trade.Id)
-	s.handler.PositionClosed(trade)
+	s.tradeManager.PositionClosed(trade)
 }
 
 /*func (s *Simulator) CloseAllPositions(bar *Bar) {
 	for _, trade := range s.positions {
 		trade.Close(tick)
-		s.handler.TradeClosed(trade)
+		s.tradeManager.TradeClosed(trade)
 		delete(s.positions, trade.Id)
 	}
 }
@@ -179,17 +175,17 @@ func (s *Simulator) CloseAllOrders() {
 }
 */
 
-func NewExchangeSimulator(file string, handler handler) *Simulator {
+func NewExchangeSimulator(file string, handler *TradeManager) *Simulator {
 	reader, err := NewTickReader(file)
 	if err != nil {
 		panic(err)
 	}
 	rv := &Simulator{
-		reader:    reader,
-		handler:   handler,
-		positions: make(map[int]*ExTrade),
-		orders:    make(map[int]*ExTrade),
-		balance:   10_000,
+		reader:       reader,
+		tradeManager: handler,
+		positions:    make(map[int]*ExTrade),
+		orders:       make(map[int]*ExTrade),
+		balance:      10_000,
 	}
 	return rv
 }

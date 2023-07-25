@@ -2,6 +2,8 @@ package exchange
 
 import (
 	"time"
+
+	"github.com/mwlazlo/srs/internal"
 )
 
 type Tick struct {
@@ -12,7 +14,7 @@ type Tick struct {
 
 // MidPrice calculates the mid-point price between Buy and Sell.
 func (t *Tick) MidPrice() float64 {
-	return (t.Buy + t.Sell) / 2
+	return internal.Round4((t.Buy + t.Sell) / 2)
 }
 
 func (t *Tick) BaseTime(duration time.Duration) time.Time {

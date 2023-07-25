@@ -24,3 +24,8 @@ func Graceful() context.Context {
 
 	return ctx
 }
+
+func Round4(value float64) float64 {
+	// round value to 4 decimals
+	return float64(int(value*10000)) / 10000
+}

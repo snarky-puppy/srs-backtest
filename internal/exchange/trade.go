@@ -13,6 +13,7 @@ const (
 type ExitReason string
 
 const (
+	ExitReasonTarget      ExitReason = "target"
 	ExitReasonStopLoss    ExitReason = "stoploss"
 	ExitReasonMarketClose ExitReason = "marketclose"
 )
@@ -37,4 +38,8 @@ type Trade struct {
 	CanAddToPosition  bool
 	IsAdditional      bool
 	OrderTime         time.Time
+}
+
+func (t *Trade) updateClosed(exTrade *ExTrade) {
+	t.ExTrade = exTrade
 }
