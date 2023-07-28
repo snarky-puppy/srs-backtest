@@ -58,6 +58,12 @@ type Simulator struct {
 	balance      float64
 }
 
+func (s *Simulator) UpdatePosition(id int, stop, target float64) {
+	trade := s.positions[id]
+	trade.StopPrice = stop
+	trade.TargetPrice = target
+}
+
 func (s *Simulator) ExitPosition(id int) *ExTrade {
 	trade := s.positions[id]
 	s.closePosition(trade, s.currentTick)

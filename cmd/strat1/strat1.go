@@ -102,13 +102,14 @@ func (s *SrsEntry) On5MinBar(history *exchange.History, tradeManager *exchange.T
 		tradeManager.AddSignal(s.signal)
 
 		createOrder := func(direction exchange.Direction) {
+			entry, stop, _ := s.signal.EST(direction)
 			tradeManager.CreateOrder(
 				s.signal,
 				exchange.OpenReasonSignal,
 				direction,
-				s.signal.Entry(direction),
-				s.signal.Stop(direction),
-				s.signal.Target(direction))
+				entry,
+				stop,
+				0)
 		}
 
 		// add 2 trades

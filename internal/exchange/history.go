@@ -33,7 +33,7 @@ func (h *History) GetBar(offset int) *Bar {
 	return h.bars[h.CurrentIndex()+offset]
 }
 
-func (h *History) GetBars(index int) []*Bar {
+func (h *History) GetBars(index int) Series {
 	if len(h.bars) == 0 || int(math.Abs(float64(index))) > len(h.bars) {
 		return nil
 	}
@@ -97,8 +97,8 @@ func (h *History) PrintReport() {
 	// as a percentage of wins
 	fmt.Printf("target hits: %f\n", float64(all.win)/float64(all.win+all.even+all.loss))
 	fmt.Printf("no trades: %d\n", noTrades)
-	fmt.Printf("biggest profit: %0.2f\thttp://localhost:8081/?signal=%s\n", biggestProfit.Profit, biggestProfit.Signal.Bar.Timestamp.Format(time.RFC3339))
-	fmt.Printf("biggest loss: %0.2f\thttp://localhost:8081/?signal=%s\n", biggestLoss.Profit, biggestProfit.Signal.Bar.Timestamp.Format(time.RFC3339))
+	fmt.Printf("biggest profit: %0.2f\thttp://localhost:8081/?d=%s\n", biggestProfit.Profit, biggestProfit.Signal.Bar.Timestamp.Format("2006-01-02-15-04-05.json"))
+	fmt.Printf("biggest loss: %0.2f\thttp://localhost:8081/?d=%s\n", biggestLoss.Profit, biggestLoss.Signal.Bar.Timestamp.Format("2006-01-02-15-04-05.json"))
 
 	// order intervals by day of week
 	var keys = []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}

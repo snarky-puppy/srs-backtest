@@ -1,6 +1,7 @@
 package exchange
 
 import (
+	"math"
 	"sort"
 	"time"
 
@@ -58,4 +59,19 @@ func (s Series) FilterDay(day time.Time) Series {
 		return rv[i].Timestamp.Before(rv[j].Timestamp)
 	})
 	return rv
+}
+
+func (s Series) HeadIdx() int {
+	return len(s) - 1
+}
+
+func (s Series) Head() *Bar {
+	return s.GetBar(s.HeadIdx())
+}
+
+func (s Series) GetBar(offset int) *Bar {
+	if len(s) == 0 || int(math.Abs(float64(offset))) > len(s) {
+		return nil
+	}
+	return s[s.HeadIdx()+offset]
 }

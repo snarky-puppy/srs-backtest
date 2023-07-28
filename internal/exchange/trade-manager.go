@@ -6,10 +6,11 @@ import (
 )
 
 const (
-	ScanTTL         = time.Hour * 3
-	TrailStopPoints = 15
-	ShortDt         = "02/01 15:04:05"
-	ShortTime       = "15:04:05"
+	ScanTTL             = time.Hour * 3
+	TrailStopPoints     = 30
+	AddToPositionPoints = 20
+	ShortDt             = "02/01 15:04:05"
+	ShortTime           = "15:04:05"
 )
 
 type MarketConfig interface {
@@ -26,17 +27,19 @@ type exchange interface {
 	CreateOrder(direction Direction, open, stop, target float64) *ExTrade
 	ExitPosition(id int) *ExTrade
 	CancelOrder(id int)
+	UpdatePosition(id int, stop, target float64)
 }
 
 type TradeManager struct {
-	aggregator    *BarAggregator
-	exchange      exchange
-	entryScanners []EntryScanner
-	orders        map[int]*Trade
-	positions     map[int]*Trade
-	activeSignals *Signals
-	marketConfig  MarketConfig
-	history       *History
+	aggregator         *BarAggregator
+	exchange           exchange
+	entryScanners      []EntryScanner
+	orders             map[int]*Trade
+	positions          map[int]*Trade
+	activeSignals      *Signals
+	marketConfig       MarketConfig
+	history            *History
+	CancelOrdersOnFill bool
 }
 
 func (t *TradeManager) PositionClosed(exTrade *ExTrade) {
@@ -57,14 +60,21 @@ func (t *TradeManager) PositionOpened(exTrade *ExTrade) {
 		t.exchange.ExitPosition(exTrade.Id)
 		return
 	}
+	trade.StopLog = append(trade.StopLog, &StopLog{
+		Stop:      trade.StopPrice,
+		Timestamp: trade.EntryTime,
+	})
 	trade.Signal.Trades = append(trade.Signal.Trades, trade)
 	t.positions[trade.Id] = trade
-	for id := range t.orders {
-		if id != trade.Id {
-			t.exchange.CancelOrder(id)
+
+	if t.CancelOrdersOnFill {
+		for id := range t.orders {
+			if id != trade.Id {
+				t.exchange.CancelOrder(id)
+			}
 		}
+		t.orders = make(map[int]*Trade)
 	}
-	t.orders = make(map[int]*Trade)
 }
 
 func (t *TradeManager) HandleTick(tick *Tick) {
@@ -93,6 +103,7 @@ func (t *TradeManager) HandleTick(tick *Tick) {
 			}
 		}
 	}
+	t.managePositions(tick)
 }
 
 func (t *TradeManager) SetExchange(exchange exchange) {
@@ -106,8 +117,15 @@ func (t *TradeManager) AddSignal(signal *Signal) {
 func (t *TradeManager) CreateOrder(signal *Signal, reason OpenReason, direction Direction, open, stop, target float64) *Trade {
 	exTrade := t.exchange.CreateOrder(direction, open, stop, target)
 	trade := &Trade{
-		ExTrade:    exTrade,
-		OpenReason: reason,
+		ExTrade:        exTrade,
+		OpenReason:     reason,
+		AutoAdjustStop: true,
+		TrailStopPoints: func() float64 {
+			if direction == Long {
+				return open - stop
+			}
+			return stop - open
+		}(),
 	}
 	t.orders[trade.Id] = trade
 	trade.Signal = signal
@@ -120,6 +138,147 @@ func (t *TradeManager) PrintReport() {
 
 func (t *TradeManager) SaveData(dir string) {
 	t.history.SaveData(dir)
+}
+
+func (t *TradeManager) managePositions(tick *Tick) {
+	for _, trade := range t.positions {
+		if !trade.IsAdditional && trade.CanAddToPosition {
+			t.considerAddingToPosition(tick, trade)
+		}
+		t.managePosition(tick, trade)
+	}
+}
+
+func (t *TradeManager) considerAddingToPosition(tick *Tick, winner *Trade) *Trade {
+	winner.CanAddToPosition = false // only 1 chance to add to position
+
+	bars := t.history.GetBars(-5)
+	bar := bars.GetBar(0)
+
+	// before: total profits: 37601
+	// after:  total profits: 19967
+	//if winner.Loser >= 2.5 {
+	//	return nil
+	//}
+
+	// we would add an entry at the top of the previous bar high
+	// so if this bar doesn't reach that high, we don't add
+	// before: 43092
+	// after: 55090
+	switch winner.Direction {
+	case Long:
+		if bar.High < bars.GetBar(-1).High {
+			return nil
+		}
+	case Short:
+		if bar.Low > bars.GetBar(-1).Low {
+			return nil
+		}
+	}
+
+	reachedTarget := winner.TargetPrice
+	half := 15.0 // float64(TargetPoints / 2)
+	// adjust stop to target / 2
+	switch winner.Direction {
+	case Long:
+		t.exchange.UpdatePosition(winner.Id, winner.TargetPrice-half, 0)
+	case Short:
+		t.exchange.UpdatePosition(winner.Id, winner.TargetPrice+half, 0)
+	}
+	winner.AutoAdjustStop = true
+
+	newTrade := t.CreateOrder(winner.Signal, OpenReasonAddToPosition, winner.Direction, reachedTarget, winner.StopPrice, winner.TargetPrice)
+	newTrade.AutoAdjustStop = true
+	newTrade.DisableLoserCheck = true
+	newTrade.IsAdditional = true
+	return newTrade
+}
+
+func (t *TradeManager) managePosition(tick *Tick, trade *Trade) {
+
+	tickPrice := tick.MidPrice()
+
+	// region adjust stops
+	// w/o 80,50
+	// w 75,45
+
+	if trade.AutoAdjustStop {
+		switch trade.Direction {
+		case Long:
+			// trail by 30 pts
+			if (tickPrice - trade.TrailStopPoints) > trade.StopPrice {
+				t.UpdateStop(tick, trade, tickPrice-trade.TrailStopPoints)
+			}
+		case Short:
+			if (tickPrice + trade.TrailStopPoints) < trade.StopPrice {
+				t.UpdateStop(tick, trade, tickPrice+trade.TrailStopPoints)
+			}
+		}
+	}
+	// endregion
+
+	//trade.CheckLoser(bar)
+
+	/*
+
+			if a trade triggers and does well (a screamer), but then trends back to the trigger,
+			don't take the next trade if it triggers (trending wrong way)
+			2000-06-07 09:10 http://localhost:8081/?signalIndex=5
+
+			trade triggers, make a high, dips and makes a double top/bottom,
+			close at the peak (and enter the opposite direction?)
+			2000-06-12 09:10 http://localhost:8081/?signalIndex=8
+
+			don't have more than 1 sell/buy in a row
+		    BUT sometimes this works, test it, remove the restriction
+			and count how many times 2 buys in a row profit, or how many times the 2nd fails, etc
+			2000-06-13 09:10 http://localhost:8081/?signalIndex=9
+
+			often, after reaching the target, the price will plateau for a few bars
+			perhaps create new signal area (box shape) on that plateau
+			2000-06-06 09:10 http://localhost:8081/?signalIndex=4
+
+			price is trending -- add to trade
+			how to know if it's a trend or screamer?
+
+	*/
+
+	/*
+		// region target
+		switch trade.Direction {
+		case pp.Long:
+			if bar.High >= trade.Target {
+				trade.CanAddToPosition = true
+				return trade
+			}
+		case pp.Short:
+			if bar.Low <= trade.Target {
+				trade.CanAddToPosition = true
+				return trade
+			}
+		}
+		// endregion target
+
+		return trade
+
+	*/
+}
+
+func (t *TradeManager) UpdateStop(tick *Tick, trade *Trade, stop float64) {
+	if len(trade.StopLog) > 0 {
+		lastStop := trade.StopLog[len(trade.StopLog)-1]
+		lastBar := t.history.GetBar(0)
+		// only update stop if we are in a newer bar than the last stop
+		if lastBar.EndTime().Equal(lastStop.Timestamp) || lastBar.EndTime().Before(lastStop.Timestamp) {
+			return
+		}
+	}
+
+	trade.StopLog = append(trade.StopLog, &StopLog{
+		Stop:      stop,
+		Timestamp: tick.Timestamp,
+	})
+	t.exchange.UpdatePosition(trade.Id, stop, 0)
 }
 
 func NewTradeManager(marketConfig MarketConfig, scanners ...EntryScanner) *TradeManager {

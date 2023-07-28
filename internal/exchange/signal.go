@@ -1,11 +1,13 @@
 package exchange
 
 import (
+	"math"
 	"time"
 )
 
 const (
 	TargetPoints = 200
+	StopLimitPts = 30
 )
 
 type Signals []*Signal
@@ -35,45 +37,7 @@ func (s *Signal) CanTrade(direction Direction) bool {
 
 func (s *Signal) EndsAt() time.Time {
 	// subtract the 5 minute duration of the starting bar or we end up with too big an end time
-	return s.Bar.Timestamp.Add(s.Bar.Duration - (5 * time.Minute))
-}
-
-//func (s *Signal) NewTrade(direction Direction) *Trade {
-//	return NewTrade(direction, s.Entry(direction), s.Stop(direction), s.Target(direction), 0, nil, s, "srs crossover")
-//}
-
-func (s *Signal) Target(direction Direction) float64 {
-	switch direction {
-	case Long:
-		return s.Entry(direction) + TargetPoints
-	case Short:
-		return s.Entry(direction) - TargetPoints
-	default:
-		panic("invalid direction")
-	}
-}
-
-func (s *Signal) Stop(direction Direction) float64 {
-	// win rate 33-36%
-	// total profit: 10555
-	//return (bar.High + bar.Low) / 2
-
-	// win rate: 41-44%
-	// total profit: 12257
-	if direction == Long {
-		return s.Bar.Low
-	}
-	return s.Bar.High
-}
-
-func (s *Signal) Entry(direction Direction) float64 {
-	switch direction {
-	case Long:
-		return s.High()
-	case Short:
-		return s.Low()
-	}
-	panic("invalid direction")
+	return s.Bar.EndTime()
 }
 
 func (s *Signal) AddPosition(trade *Trade) {
@@ -90,4 +54,18 @@ func (s *Signal) EncodeableClone() *Signal {
 		Bar:    s.Bar.Copy(),
 		Trades: newTrades,
 	}
+}
+
+func (s *Signal) EST(direction Direction) (entry, stop, target float64) {
+	switch direction {
+	case Long:
+		entry = s.High()
+		target = entry + TargetPoints
+		stop = math.Min(s.Bar.Low, entry-StopLimitPts)
+	case Short:
+		entry = s.Low()
+		target = entry - TargetPoints
+		stop = math.Min(s.Bar.High, entry+StopLimitPts)
+	}
+	return
 }

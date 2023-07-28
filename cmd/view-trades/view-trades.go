@@ -220,8 +220,8 @@ func endpoint(rr *ReportReader) http.HandlerFunc {
 				opt = append(opt,
 					charts.WithMarkAreaDataItem(
 						opts.MarkAreaDataItem{
-							YAxis: trade.OpenPrice,
-							XAxis: trade.OpenTime,
+							YAxis: trade.EntryPrice,
+							XAxis: trade.EntryTime,
 							ItemStyle: &opts.ItemStyle{
 								BorderColor: "rgba(255, 0, 0, 0.3)",
 								BorderWidth: 1,
@@ -235,18 +235,24 @@ func endpoint(rr *ReportReader) http.HandlerFunc {
 				)
 			}*/
 
-		for _, trade := range signal.Trades {
+		for i, trade := range signal.Trades {
 			//var high opts.MarkPointDataItem
 			//if trade.Direction == Long && trade.HighAfterBars != 0 {
-			//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("High +%0.2f", trade.High-trade.OpenPrice))
+			//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("High +%0.2f", trade.High-trade.EntryPrice))
 			//}
 			//if trade.Direction == Short && trade.HighAfterBars != 0 {
-			//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("Low +%0.2f", trade.OpenPrice-trade.High))
+			//	high = lArrow(trade.High, trade.HighAt, fmt.Sprintf("Low +%0.2f", trade.EntryPrice-trade.High))
 			//}
 			opt = append(opt, charts.WithMarkPointDataItem(
-				lArrow(trade.OpenPrice, trade.OpenTime.Truncate(5*time.Minute), "Entry "+trade.Direction.String()),
+				lArrow(trade.EntryPrice, trade.EntryTime.Truncate(5*time.Minute), "Entry "+trade.Direction.String()),
 				lArrow(trade.ExitPrice, trade.ExitTime.Truncate(5*time.Minute), fmt.Sprintf("Exit %0.2f (%s)", trade.Profit, trade.ExitReason)),
 			))
+
+			series := charts.SingleSeries{Name: fmt.Sprintf("Trade %d stop", i),
+				Type: types.ChartLine,
+				Data: trade.PlotStopLine(data),
+			}
+			line.MultiSeries = append(line.MultiSeries, series)
 		}
 
 		line.SetXAxis(data.ToChartXAxis()).
@@ -277,7 +283,7 @@ func endpoint(rr *ReportReader) http.HandlerFunc {
 		summary.WriteString(fmt.Sprintln("<tr><th>signal</th>", td(signal.Bar.Timestamp.Format("15:04")), td(signal.Bar.High), td(signal.Bar.Low), "<td></td><td></td></tr>"))
 		summary.WriteString("<tr><th></th><th>Time</th><th>Price</th><th>Dir/Result</th><th>Reason</th>")
 		for _, trade := range signal.Trades {
-			summary.WriteString(fmt.Sprintln("<tr><th>entry</th>", td(trade.OpenTime.Format("15:04")), td(trade.OpenPrice), td(trade.Direction), td(trade.OpenReason), "</tr>"))
+			summary.WriteString(fmt.Sprintln("<tr><th>entry</th>", td(trade.EntryTime.Format("15:04")), td(trade.EntryPrice), td(trade.Direction), td(trade.OpenReason), "</tr>"))
 			summary.WriteString(fmt.Sprintln("<tr><th>exit</th>", td(trade.ExitTime.Format("15:04")), td(trade.ExitPrice), td(trade.Profit), td(trade.ExitReason), "</tr>"))
 		}
 		summary.WriteString(fmt.Sprintf("<tr><th></th><th></th><th></th><th></th><th>%0.2f</th><th></th>", pl))

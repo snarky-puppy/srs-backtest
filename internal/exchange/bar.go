@@ -75,6 +75,11 @@ func (b *Bar) ClosingTime() time.Time {
 	return b.Timestamp.Add(b.Duration)
 }
 
+// The end time of the bar
+func (b *Bar) EndTime() time.Time {
+	return b.Timestamp.Add(b.Duration)
+}
+
 func NewBar(duration time.Duration) *Bar {
 	return &Bar{Duration: duration}
 }
