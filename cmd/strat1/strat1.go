@@ -102,6 +102,9 @@ func (s *SrsEntry) On5MinBar(history *exchange.History, tradeManager *exchange.T
 		tradeManager.AddSignal(s.signal)
 
 		createOrder := func(direction exchange.Direction) {
+			if bar.Timestamp.Format("2006-01-02") == "2023-06-21" {
+				log.Println("creating order")
+			}
 			entry, stop, _ := s.signal.EST(direction)
 			tradeManager.CreateOrder(
 				s.signal,

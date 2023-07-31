@@ -7,7 +7,7 @@ import (
 
 const (
 	TargetPoints = 200
-	StopLimitPts = 30
+	MaxStopPts   = 50
 )
 
 type Signals []*Signal
@@ -61,11 +61,11 @@ func (s *Signal) EST(direction Direction) (entry, stop, target float64) {
 	case Long:
 		entry = s.High()
 		target = entry + TargetPoints
-		stop = math.Min(s.Bar.Low, entry-StopLimitPts)
+		stop = math.Max(s.Bar.Low, entry-MaxStopPts)
 	case Short:
 		entry = s.Low()
 		target = entry - TargetPoints
-		stop = math.Min(s.Bar.High, entry+StopLimitPts)
+		stop = math.Min(s.Bar.High, entry+MaxStopPts)
 	}
 	return
 }

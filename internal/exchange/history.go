@@ -69,7 +69,8 @@ func (h *History) PrintReport() {
 				trade.EntryTime.Format(ShortDt),
 				trade.EntryPrice, "\t",
 				trade.ExitTime.Format(ShortTime), trade.ExitPrice, "\t",
-				trade.ExitReason, trade.Profit, trade.Balance)
+				trade.Profit, "\t",
+				trade.Balance)
 
 			if trade.Profit == 0 {
 				intervals[k].addEven()
@@ -97,8 +98,8 @@ func (h *History) PrintReport() {
 	// as a percentage of wins
 	fmt.Printf("target hits: %f\n", float64(all.win)/float64(all.win+all.even+all.loss))
 	fmt.Printf("no trades: %d\n", noTrades)
-	fmt.Printf("biggest profit: %0.2f\thttp://localhost:8081/?d=%s\n", biggestProfit.Profit, biggestProfit.Signal.Bar.Timestamp.Format("2006-01-02-15-04-05.json"))
-	fmt.Printf("biggest loss: %0.2f\thttp://localhost:8081/?d=%s\n", biggestLoss.Profit, biggestLoss.Signal.Bar.Timestamp.Format("2006-01-02-15-04-05.json"))
+	fmt.Printf("biggest profit: %0.2f\thttp://localhost:8081/?d=%s\n", biggestProfit.Profit, biggestProfit.Signal.Bar.Timestamp.Format("2006-01-02-15-04-05-0.json"))
+	fmt.Printf("biggest loss: %0.2f\thttp://localhost:8081/?d=%s\n", biggestLoss.Profit, biggestLoss.Signal.Bar.Timestamp.Format("2006-01-02-15-04-05-0.json"))
 
 	// order intervals by day of week
 	var keys = []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}

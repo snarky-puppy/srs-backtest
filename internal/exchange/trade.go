@@ -36,13 +36,13 @@ type Trade struct {
 
 	Loser             float64 // the Loser score
 	DisableLoserCheck bool    // disable the Loser score (for add-on trades)
-	MaxLoser          float64 // the highest loser score during this trade
 	Signal            *Signal // the originating signal
 	AutoAdjustStop    bool    // if true, trade management will automatically update this trade's stop
 	CanAddToPosition  bool
 	IsAdditional      bool
 	OrderTime         time.Time
 	TrailStopPoints   float64
+	LoserThreshold    float64
 }
 
 func (t *Trade) updateClosed(exTrade *ExTrade) {
@@ -76,4 +76,69 @@ func (t *Trade) PlotStopLine(data Series) (stopLine []opts.KlineData) {
 	}
 
 	return
+}
+
+func (t *Trade) CheckLoser(bar *Bar) {
+	/*
+		1. ClosePrice losing trades early: if the trade is in loss for too long, 3-5 bars in, close the trade
+			 (dubbed "sunken" - bar's high is still a loss)
+			- long: the high is under the trigger for 3 bars -- close
+			- short: the low is over the trigger for 3 bars -- close
+		or
+			(dubbed "straddle")
+			- long: high above and low below the trigger for 4 consecutive -- close
+			- short: low below and high above the trigger for 4 consecutive -- close
+		or
+			(dubbed modified straddle)
+			- straddle for 3 then move out -- set stop to break even
+		or
+			- long: straddle for 3 then high below the trigger for 1 -- close
+			- short: straddle for 3 then low above the trigger for 1 -- close
+
+		Loser score:
+		  + 1.5 for every bar high is under trigger
+		  + 1   for every bar straddle
+		  ** RESET score when 5 min bar clears the trigger (long: low > trigger, short: high < trigger)
+	*/
+
+	if t.DisableLoserCheck {
+		return
+	}
+
+	isStraddle := bar.High > t.OpenPrice && bar.Low < t.OpenPrice
+	isSunken := false
+	switch t.Direction {
+	case Long:
+		isSunken = bar.High < t.OpenPrice
+	case Short:
+		isSunken = bar.Low > t.OpenPrice
+	}
+
+	if isSunken && isStraddle {
+		panic("failed sanity check: isSunken && isStraddle")
+	}
+
+	switch {
+	case isSunken:
+		t.UpdateLoserScore(1.5)
+	case isStraddle:
+		t.UpdateLoserScore(1)
+	default:
+		// Once the trade is a loser, it can't be recovered because the stop/break even trades are already submitted
+		if !t.IsLoser() /* || LoserCanRecover */ {
+			t.ResetLoserStatus()
+		}
+	}
+}
+
+func (t *Trade) UpdateLoserScore(l float64) {
+	t.Loser += l
+}
+
+func (t *Trade) IsLoser() bool {
+	return t.Loser >= t.LoserThreshold
+}
+
+func (t *Trade) ResetLoserStatus() {
+	t.Loser = 0
 }

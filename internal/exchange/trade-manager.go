@@ -2,6 +2,7 @@ package exchange
 
 import (
 	"log"
+	"math"
 	"time"
 )
 
@@ -98,6 +99,7 @@ func (t *TradeManager) HandleTick(tick *Tick) {
 				t.positions = make(map[int]*Trade)
 			}
 		} else {
+			t.On5MinBar(tick, bar)
 			for _, scanner := range t.entryScanners {
 				scanner.On5MinBar(t.history, t)
 			}
@@ -117,9 +119,11 @@ func (t *TradeManager) AddSignal(signal *Signal) {
 func (t *TradeManager) CreateOrder(signal *Signal, reason OpenReason, direction Direction, open, stop, target float64) *Trade {
 	exTrade := t.exchange.CreateOrder(direction, open, stop, target)
 	trade := &Trade{
-		ExTrade:        exTrade,
-		OpenReason:     reason,
-		AutoAdjustStop: true,
+		ExTrade:          exTrade,
+		OpenReason:       reason,
+		AutoAdjustStop:   true,
+		LoserThreshold:   15,
+		CanAddToPosition: true,
 		TrailStopPoints: func() float64 {
 			if direction == Long {
 				return open - stop
@@ -142,18 +146,14 @@ func (t *TradeManager) SaveData(dir string) {
 
 func (t *TradeManager) managePositions(tick *Tick) {
 	for _, trade := range t.positions {
-		if !trade.IsAdditional && trade.CanAddToPosition {
-			t.considerAddingToPosition(tick, trade)
-		}
 		t.managePosition(tick, trade)
 	}
 }
 
-func (t *TradeManager) considerAddingToPosition(tick *Tick, winner *Trade) *Trade {
+func (t *TradeManager) considerAddingToPosition(bar *Bar, winner *Trade) *Trade {
 	winner.CanAddToPosition = false // only 1 chance to add to position
 
 	bars := t.history.GetBars(-5)
-	bar := bars.GetBar(0)
 
 	// before: total profits: 37601
 	// after:  total profits: 19967
@@ -207,17 +207,15 @@ func (t *TradeManager) managePosition(tick *Tick, trade *Trade) {
 		case Long:
 			// trail by 30 pts
 			if (tickPrice - trade.TrailStopPoints) > trade.StopPrice {
-				t.UpdateStop(tick, trade, tickPrice-trade.TrailStopPoints)
+				t.UpdatePosition(tick, trade, tickPrice-trade.TrailStopPoints, 0)
 			}
 		case Short:
 			if (tickPrice + trade.TrailStopPoints) < trade.StopPrice {
-				t.UpdateStop(tick, trade, tickPrice+trade.TrailStopPoints)
+				t.UpdatePosition(tick, trade, tickPrice+trade.TrailStopPoints, 0)
 			}
 		}
 	}
 	// endregion
-
-	//trade.CheckLoser(bar)
 
 	/*
 
@@ -264,7 +262,7 @@ func (t *TradeManager) managePosition(tick *Tick, trade *Trade) {
 	*/
 }
 
-func (t *TradeManager) UpdateStop(tick *Tick, trade *Trade, stop float64) {
+func (t *TradeManager) UpdatePosition(tick *Tick, trade *Trade, stop, target float64) {
 	if len(trade.StopLog) > 0 {
 		lastStop := trade.StopLog[len(trade.StopLog)-1]
 		lastBar := t.history.GetBar(0)
@@ -279,6 +277,26 @@ func (t *TradeManager) UpdateStop(tick *Tick, trade *Trade, stop float64) {
 		Timestamp: tick.Timestamp,
 	})
 	t.exchange.UpdatePosition(trade.Id, stop, 0)
+}
+
+func (t *TradeManager) On5MinBar(tick *Tick, bar *Bar) {
+	for _, position := range t.positions {
+		position.CheckLoser(bar)
+		if position.IsLoser() {
+			// try to close for beak-even
+			switch position.Direction {
+			case Long:
+				t.exchange.UpdatePosition(position.Id, math.Max(position.StopPrice, bar.Low+3), position.OpenPrice)
+			case Short:
+				t.exchange.UpdatePosition(position.Id, math.Min(position.StopPrice, bar.High+3), position.OpenPrice)
+			}
+			continue
+		}
+
+		if !position.IsAdditional && position.CanAddToPosition {
+			t.considerAddingToPosition(bar, position)
+		}
+	}
 }
 
 func NewTradeManager(marketConfig MarketConfig, scanners ...EntryScanner) *TradeManager {
