@@ -47,10 +47,10 @@ func (s Series) SignalContext(signal *Signal) (rv Series) {
 	return s[startIdx:endIdx]
 }
 
-func (s Series) FilterDay(day time.Time) Series {
+func (s Series) FilterDay(day time.Time, location *time.Location) Series {
 	var rv Series
 	for _, bar := range s {
-		t := bar.Timestamp.In(day.Location())
+		t := bar.Timestamp.In(location)
 		if t.Year() == day.Year() && t.Month() == day.Month() && t.Day() == day.Day() {
 			rv = append(rv, bar)
 		}

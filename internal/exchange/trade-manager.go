@@ -18,6 +18,7 @@ type MarketConfig interface {
 	MarketOpen(t time.Time) time.Time
 	MarketClose(t time.Time) time.Time
 	IsOpen(t time.Time) bool
+	Location() *time.Location
 }
 
 type EntryScanner interface {
@@ -141,7 +142,7 @@ func (t *TradeManager) PrintReport() {
 }
 
 func (t *TradeManager) SaveData(dir string) {
-	t.history.SaveData(dir)
+	t.history.SaveData(dir, t.marketConfig.Location())
 }
 
 func (t *TradeManager) managePositions(tick *Tick) {
@@ -151,9 +152,14 @@ func (t *TradeManager) managePositions(tick *Tick) {
 }
 
 func (t *TradeManager) considerAddingToPosition(bar *Bar, winner *Trade) *Trade {
+
+	if winner.EntryTime.Truncate(bar.Duration).Equal(bar.Timestamp) {
+		return nil
+	}
+
 	winner.CanAddToPosition = false // only 1 chance to add to position
 
-	bars := t.history.GetBars(-5)
+	bars := t.history.GetBars(5)
 
 	// before: total profits: 37601
 	// after:  total profits: 19967

@@ -14,17 +14,39 @@
     </div>
     <div class="box">
         <div class="container">
-            <div class="item" id="chart" style="width:900px;height:500px;"></div>
+            <div class="item" id="chart" style="width:1200px;height:500px;"></div>
         </div>
+        <table border=1>
+            <tr>
+                <th>#</th>
+                <th>Entry Reason</th>
+                <th>Entry Time</th>
+                <th>Entry Price</th>
+                <th>Exit Time</th>
+                <th>Exit Price</th>
+                <th>Profit</th>
+                <th>Exit Reason</th>
+            </tr>
+            {{range $i, $a := .Signal.Trades}}
+            <tr>
+                <td>{{ $i }}</td>
+                <td>{{ $a.OpenReason }}</td>
+                <td>{{ $a.EntryTime.Format "15:04" }}</td>
+                <td>{{ $a.EntryPrice }}</td>
+                <td>{{ $a.ExitTime.Format "15:04" }}</td>
+                <td>{{ $a.ExitPrice }}</td>
+                <td>{{ $a.Profit }}</td>
+                <td>{{ $a.ExitReason }}</td>
+            </tr>
+            {{end}}
+        </table>
     </div>
     <script type="text/javascript">
         var data = [
-            {{- range .Candle }}[{{ .Open }}, {{ .Close }}, {{ .Low }}, {{ .High }}],{{- end }}
-            []
+            {{- range .Candle }}[{{.Open}}, {{ .Close }}, {{ .Low }}, {{ .High }}],{{- end }}
         ];
         var xData = [
             {{- range .Candle }}"{{ .Timestamp.Format "15:04" }}",{{- end }}
-            []
         ];
     	function calculateMA(dayCount, data) {
     		var result = [];
@@ -42,6 +64,12 @@
     		}
     		return result;
     	}
+    	function fix(timeStr) {
+          const [hour, minutes] = timeStr.split(":").map(Number);
+          const roundedMinutes = Math.floor(minutes / 5) * 5;
+          const roundedTime = `${hour.toString().padStart(2, "0")}:${roundedMinutes.toString().padStart(2, "0")}`;
+          return roundedTime;
+        }
         var chart = echarts.init(document.getElementById('chart'), 'westeros');
         var option = {
             series: [
@@ -55,7 +83,62 @@
                             borderColor: '#ef232a',
                             borderColor0: '#14b143'
                         }
-                    }
+                    },
+                    markArea: {
+                        silent: true,
+                        data: [
+                            [
+                                {
+                                    itemStyle: {
+                                        borderColor: "rgba(255, 0, 0, 0.3)",
+                                        borderWidth: 1
+                                    },
+                                    yAxis: {{ .Signal.Bar.High }},
+                                    xAxis: "{{ .Signal.Bar.Timestamp.Format "15:04" }}",
+                                },
+                                {
+                                    yAxis: {{ .Signal.Bar.Low }},
+                                    xAxis: "{{ .Signal.Bar.EndTime.Format "15:04" }}",
+                                }
+                            ],
+                        ]
+                    },
+                    markPoint: {
+                        data: [
+                           {{range $i, $a := .Signal.Trades}}
+                            {
+                                value: "{{ $i }}. {{ $a.Direction }} {{ $a.OpenReason }}",
+                                xAxis: fix("{{ $a.EntryTime.Format "15:04" }}"),
+                                yAxis: {{ $a.EntryPrice }},
+                                symbol: "arrow",
+                                symbolSize: 10,
+                                symbolRotate: 270,
+                                itemStyle: {
+                                    color: 'blue'
+                                },
+                                label: {
+                                    show: true,
+                                    position: "left"
+                                },
+                            },
+                            {
+                                value: "{{ $i }}. Exit {{ $a.Profit }} {{ $a.ExitReason }}",
+                                xAxis: fix("{{ $a.ExitTime.Format "15:04" }}"),
+                                yAxis: {{ $a.ExitPrice }},
+                                symbol: "arrow",
+                                symbolSize: 10,
+                                symbolRotate: 90,
+                                itemStyle: {
+                                    color: 'blue'
+                                },
+                                label: {
+                                    show: true,
+                                    position: "right"
+                                },
+                            },
+                            {{end}}
+                        ]
+                    },
                 },
                 {
                   name: 'MA5',

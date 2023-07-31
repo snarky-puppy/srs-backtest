@@ -528,11 +528,11 @@ func manageTrade(i int, trade *pp.Trade, bar *pp.Bar, signal *pp.Signal) *pp.Tra
 
 func (s *Strategy) runUI() {
 
-	log.Println("opening http://localhost:8081/")
+	log.Println("opening http://localhost:8082/")
 	fs := http.FileServer(http.Dir("./static"))
 	http.Handle("/static/", http.StripPrefix("/static/", fs))
 	http.HandleFunc("/", s.httpserver(bars))
-	_ = http.ListenAndServe("localhost:8081", nil)
+	_ = http.ListenAndServe("localhost:8082", nil)
 }
 
 func (s *Strategy) GetResult() (rv Result) {

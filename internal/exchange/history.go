@@ -12,9 +12,32 @@ import (
 	"github.com/go-echarts/go-echarts/v2/types"
 )
 
+const (
+	ChartBar = time.Minute * 5
+)
+
 type HistoricalRecord struct {
-	Signal  *Signal
-	Context Series
+	Signal   *Signal
+	Context  Series
+	Timezone string
+}
+
+func (r *HistoricalRecord) Localise() {
+	location, _ := time.LoadLocation(r.Timezone)
+	for _, bar := range r.Context {
+		bar.Timestamp = bar.Timestamp.In(location)
+	}
+	r.Signal.Bar.Timestamp = r.Signal.Bar.Timestamp.In(location)
+	for _, trade := range r.Signal.Trades {
+		trade.OpenTime = trade.OpenTime.In(location)
+		trade.EntryTime = trade.EntryTime.In(location)
+		trade.ExitTime = trade.ExitTime.In(location)
+		for _, stopLog := range trade.StopLog {
+			stopLog.Timestamp = stopLog.Timestamp.In(location)
+		}
+		// round profit 2 decimals
+		trade.Profit = math.Round(trade.Profit*100) / 100
+	}
 }
 
 type History struct {
@@ -34,6 +57,9 @@ func (h *History) GetBar(offset int) *Bar {
 }
 
 func (h *History) GetBars(index int) Series {
+	if index < 0 {
+		panic("index must be positive")
+	}
 	if len(h.bars) == 0 || int(math.Abs(float64(index))) > len(h.bars) {
 		return nil
 	}
@@ -116,21 +142,21 @@ func (h *History) CurrentIndex() int {
 	return len(h.bars) - 1
 }
 
-func (h *History) SaveData(path string) {
+func (h *History) SaveData(path string, location *time.Location) {
 	index := 0
 	lastDay := ""
 	for _, signal := range h.signals {
-		day := signal.Bar.Timestamp.Format("2006-01-02-15-04-05")
+		day := signal.Bar.Timestamp.Local().Format("2006-01-02-15-04-05")
 		if day != lastDay {
 			index = 0
 			lastDay = day
 		}
 		name := fmt.Sprintf("%s/%s-%d.json", path, day, index)
-		h.saveSignalData(signal, name)
+		h.saveSignalData(signal, name, location)
 	}
 }
 
-func (h *History) saveSignalData(signal *Signal, fileName string) {
+func (h *History) saveSignalData(signal *Signal, fileName string, location *time.Location) {
 	f, err := os.Create(fileName)
 	if err != nil {
 		panic(err)
@@ -141,8 +167,9 @@ func (h *History) saveSignalData(signal *Signal, fileName string) {
 	enc.SetIndent("", "  ")
 
 	body := HistoricalRecord{
-		Signal:  signal.EncodeableClone(),
-		Context: h.bars.FilterDay(signal.Bar.Timestamp),
+		Signal:   signal.EncodeableClone(),
+		Context:  h.bars.FilterDay(signal.Bar.Timestamp, location),
+		Timezone: location.String(),
 	}
 
 	err = enc.Encode(body)

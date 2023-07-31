@@ -13,6 +13,10 @@ type DaxConfig struct {
 	tz *time.Location
 }
 
+func (d *DaxConfig) Location() *time.Location {
+	return d.tz
+}
+
 func (d *DaxConfig) IsOpen(t time.Time) bool {
 	t = t.In(d.Timezone())
 	return t.After(d.MarketOpen(t)) && t.Before(d.MarketClose(t))

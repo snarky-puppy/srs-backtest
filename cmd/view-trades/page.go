@@ -13,15 +13,18 @@ type pageData struct {
 	Prev   string
 	Next   string
 	Candle exchange.Series
+	Signal *exchange.Signal
 }
 
 // render page.tpl
 func Render(w http.ResponseWriter, pos position, report exchange.HistoricalRecord) {
+	report.Localise()
 	var data = pageData{
 		Title:  report.Signal.Bar.Timestamp.Format(time.DateTime),
 		Prev:   pos.prev,
 		Next:   pos.next,
 		Candle: report.Context,
+		Signal: report.Signal,
 	}
 	tpl := template.Must(template.ParseFiles("cmd/view-trades/page.tpl"))
 	if err := tpl.ExecuteTemplate(w, "page.tpl", data); err != nil {
