@@ -18,6 +18,10 @@ func (b *Bar) MarketCloseBar() bool {
 	return b.Timestamp.Hour() == 17 && b.Timestamp.Minute() == 25
 }
 
+func (b *Bar) AvgPrice() float64 {
+	return (b.Open + b.High + b.Low + b.Close) / 4
+}
+
 // Copy the bar
 func (b *Bar) Copy() *Bar {
 	return &Bar{
@@ -71,11 +75,13 @@ func (b *Bar) AddTick(t *Tick) {
 	b.lastPrice = midPrice
 }
 
-func (b *Bar) ClosingTime() time.Time {
-	return b.Timestamp.Add(b.Duration)
+// EndBar is the time of the last bar, when this Bar is a 15 minute bar.
+// E.g. b.Timestamp is 9:00, b.Duration is 15 minutes, then EndBar() is 9:10, since 9:10 ends at 9:15.
+func (b *Bar) EndBar() time.Time {
+	return b.Timestamp.Add(b.Duration).Add(-5 * time.Minute)
 }
 
-// The end time of the bar
+// EndTime returns the end time of the bar
 func (b *Bar) EndTime() time.Time {
 	return b.Timestamp.Add(b.Duration)
 }

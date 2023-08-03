@@ -18,34 +18,46 @@ const (
 
 // exchange idea of trade is much simpler than the strategy's idea of a trade
 type ExTrade struct {
-	Id          int
-	Status      ExTradeStatus
-	Direction   Direction
-	OpenTime    time.Time
-	OpenPrice   float64
-	EntryTime   time.Time
-	EntryPrice  float64
-	ExitTime    time.Time
-	ExitPrice   float64
-	StopPrice   float64
-	TargetPrice float64
-	Balance     float64
-	Profit      float64
+	Id           int
+	Size         float64
+	Status       ExTradeStatus
+	Direction    Direction
+	OpenTime     time.Time
+	OpenPrice    float64
+	EntryTime    time.Time
+	EntryPrice   float64
+	ExitTime     time.Time
+	ExitPrice    float64
+	StopPrice    float64
+	TargetPrice  float64
+	Balance      float64
+	Profit       float64
+	PointsProfit float64
 }
 
 func (t *ExTrade) close(tick *Tick, balance float64) (newBalance float64) {
 	t.Status = Closed
 	t.ExitTime = tick.Timestamp
 	t.ExitPrice = tick.MidPrice()
-	switch t.Direction {
-	case Long:
-		t.Profit = internal.Round4(t.ExitPrice - t.EntryPrice)
-	case Short:
-		t.Profit = internal.Round4(t.EntryPrice - t.ExitPrice)
-	}
-	newBalance = internal.Round4(balance + t.Profit)
+	t.PointsProfit = t.CalculatePointsProfit(t.ExitPrice)
+	t.Profit = t.CalculateRealProfit(t.ExitPrice)
+	newBalance = internal.Round2(balance + t.Profit)
 	t.Balance = newBalance
 	return
+}
+
+func (t *ExTrade) CalculatePointsProfit(close float64) float64 {
+	switch t.Direction {
+	case Long:
+		return internal.Round2(close - t.EntryPrice)
+	case Short:
+		return internal.Round2(t.EntryPrice - close)
+	}
+	return 0
+}
+
+func (t *ExTrade) CalculateRealProfit(close float64) float64 {
+	return internal.Round2(t.Size * t.CalculatePointsProfit(close))
 }
 
 type Simulator struct {
@@ -56,6 +68,10 @@ type Simulator struct {
 	currentTick  *Tick
 	tradeManager *TradeManager
 	balance      float64
+}
+
+func (s *Simulator) GetBalance() float64 {
+	return s.balance
 }
 
 func (s *Simulator) UpdatePosition(id int, stop, target float64) {
@@ -125,21 +141,22 @@ func (s *Simulator) addTick(tick *Tick) {
 	for _, trade := range s.orders {
 		switch trade.Direction {
 		case Long:
-			if tick.MidPrice() >= trade.OpenPrice {
+			if tick.Buy >= trade.OpenPrice {
 				s.enterPosition(trade, tick)
 			}
 		case Short:
-			if tick.MidPrice() <= trade.OpenPrice {
+			if tick.Sell <= trade.OpenPrice {
 				s.enterPosition(trade, tick)
 			}
 		}
 	}
 }
 
-func (s *Simulator) CreateOrder(direction Direction, open, stop, target float64) *ExTrade {
+func (s *Simulator) CreateOrder(direction Direction, size, open, stop, target float64) *ExTrade {
 	s.tradeId++
 	trade := &ExTrade{
 		Id:          s.tradeId,
+		Size:        size,
 		Status:      Order,
 		Direction:   direction,
 		OpenPrice:   open,
@@ -153,7 +170,7 @@ func (s *Simulator) CreateOrder(direction Direction, open, stop, target float64)
 
 func (s *Simulator) enterPosition(trade *ExTrade, tick *Tick) {
 	trade.EntryTime = tick.Timestamp
-	trade.EntryPrice = tick.MidPrice()
+	trade.EntryPrice = tick.DirectionPrice(trade.Direction)
 	trade.Status = Position
 	delete(s.orders, trade.Id)
 	s.positions[trade.Id] = trade
@@ -191,7 +208,7 @@ func NewExchangeSimulator(file string, handler *TradeManager) *Simulator {
 		tradeManager: handler,
 		positions:    make(map[int]*ExTrade),
 		orders:       make(map[int]*ExTrade),
-		balance:      10_000,
+		balance:      3_450,
 	}
 	return rv
 }

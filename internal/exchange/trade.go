@@ -3,8 +3,6 @@ package exchange
 import (
 	"fmt"
 	"time"
-
-	"github.com/go-echarts/go-echarts/v2/opts"
 )
 
 type OpenReason string
@@ -43,6 +41,15 @@ type Trade struct {
 	OrderTime         time.Time
 	TrailStopPoints   float64
 	LoserThreshold    float64
+	BTL               int // Bars To Live (close when BTL == 0)
+
+	OpenAngle5  float64
+	EntryAngle5 float64
+	ExitAngle5  float64
+
+	OpenAngle20  float64
+	EntryAngle20 float64
+	ExitAngle20  float64
 }
 
 func (t *Trade) updateClosed(exTrade *ExTrade) {
@@ -56,7 +63,7 @@ func (t *Trade) updateClosed(exTrade *ExTrade) {
 	}
 }
 
-func (t *Trade) PlotStopLine(data Series) (stopLine []opts.KlineData) {
+func (t *Trade) PlotStopLine(data Series) (stopLine []string) {
 	var (
 		stopIdx int
 		curStop string
@@ -72,7 +79,7 @@ func (t *Trade) PlotStopLine(data Series) (stopLine []opts.KlineData) {
 			curStop = "-"
 		}
 
-		stopLine = append(stopLine, opts.KlineData{Value: curStop})
+		stopLine = append(stopLine, curStop)
 	}
 
 	return

@@ -8,6 +8,7 @@ import (
 const (
 	TargetPoints = 200
 	MaxStopPts   = 50
+	MinStopPts   = 20
 )
 
 type Signals []*Signal

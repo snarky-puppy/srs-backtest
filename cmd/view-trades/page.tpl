@@ -19,34 +19,47 @@
         <table border=1>
             <tr>
                 <th>#</th>
+                <th>Size</th>
+                <th>Direction</th>
+                <th>Stop Pts</th>
                 <th>Entry Reason</th>
                 <th>Entry Time</th>
                 <th>Entry Price</th>
                 <th>Exit Time</th>
                 <th>Exit Price</th>
+                <th>Pts Profit</th>
                 <th>Profit</th>
                 <th>Exit Reason</th>
             </tr>
-            {{range $i, $a := .Signal.Trades}}
+            {{range .Trades}}
             <tr>
-                <td>{{ $i }}</td>
-                <td>{{ $a.OpenReason }}</td>
-                <td>{{ $a.EntryTime.Format "15:04" }}</td>
-                <td>{{ $a.EntryPrice }}</td>
-                <td>{{ $a.ExitTime.Format "15:04" }}</td>
-                <td>{{ $a.ExitPrice }}</td>
-                <td>{{ $a.Profit }}</td>
-                <td>{{ $a.ExitReason }}</td>
+                <td>{{ .Id }}</td>
+                <td>{{ .Size }}</td>
+                <td>{{ .Direction }}</td>
+                <td>{{ .TrailStopPoints }}</td>
+                <td>{{ .OpenReason }}</td>
+                <td>{{ .EntryTime.Format "15:04" }}</td>
+                <td>{{ .EntryPrice }}</td>
+                <td>{{ .ExitTime.Format "15:04" }}</td>
+                <td>{{ .ExitPrice }}</td>
+                <td>{{ .PointsProfit }}</td>
+                <td>{{ .Profit }}</td>
+                <td>{{ .ExitReason }}</td>
             </tr>
             {{end}}
+            <tr>
+                <td colspan=10 align=right>Profit: &nbsp;</td>
+                <td> {{ .Profit }}</td>
+                <td></td>
+            </tr>
         </table>
     </div>
     <script type="text/javascript">
         var data = [
-            {{- range .Candle }}[{{.Open}}, {{ .Close }}, {{ .Low }}, {{ .High }}],{{- end }}
+            {{- range .Series }}[{{.Open}}, {{ .Close }}, {{ .Low }}, {{ .High }}],{{- end }}
         ];
         var xData = [
-            {{- range .Candle }}"{{ .Timestamp.Format "15:04" }}",{{- end }}
+            {{- range .Series }}"{{ .Timestamp.Format "15:04" }}",{{- end }}
         ];
     	function calculateMA(dayCount, data) {
     		var result = [];
@@ -98,18 +111,18 @@
                                 },
                                 {
                                     yAxis: {{ .Signal.Bar.Low }},
-                                    xAxis: "{{ .Signal.Bar.EndTime.Format "15:04" }}",
+                                    xAxis: "{{ .Signal.Bar.EndBar.Format "15:04" }}",
                                 }
                             ],
                         ]
                     },
                     markPoint: {
                         data: [
-                           {{range $i, $a := .Signal.Trades}}
+                           {{range .Trades}}
                             {
-                                value: "{{ $i }}. {{ $a.Direction }} {{ $a.OpenReason }}",
-                                xAxis: fix("{{ $a.EntryTime.Format "15:04" }}"),
-                                yAxis: {{ $a.EntryPrice }},
+                                value: "{{ .Id }}. {{ .Direction }} {{ .OpenReason }}",
+                                xAxis: fix("{{ .EntryTime.Format "15:04" }}"),
+                                yAxis: {{ .EntryPrice }},
                                 symbol: "arrow",
                                 symbolSize: 10,
                                 symbolRotate: 270,
@@ -122,9 +135,9 @@
                                 },
                             },
                             {
-                                value: "{{ $i }}. Exit {{ $a.Profit }} {{ $a.ExitReason }}",
-                                xAxis: fix("{{ $a.ExitTime.Format "15:04" }}"),
-                                yAxis: {{ $a.ExitPrice }},
+                                value: "{{ .Id }}. Exit {{ .Profit }} {{ .ExitReason }}",
+                                xAxis: fix("{{ .ExitTime.Format "15:04" }}"),
+                                yAxis: {{ .ExitPrice }},
                                 symbol: "arrow",
                                 symbolSize: 10,
                                 symbolRotate: 90,
@@ -152,9 +165,9 @@
                   }
                 },
                 {
-                  name: 'MA20',
+                  name: 'MA25',
                   type: 'line',
-                  data: calculateMA(20, data),
+                  data: calculateMA(25, data),
                   smooth: true,
                   showSymbol: false,
                   lineStyle: {
@@ -162,6 +175,33 @@
                     opacity: 0.5
                   }
                 },
+                {
+                  name: 'MA50',
+                  type: 'line',
+                  data: calculateMA(50, data),
+                  smooth: true,
+                  showSymbol: false,
+                  lineStyle: {
+                    width: 1,
+                    opacity: 0.5
+                  }
+                },
+                {{range .Trades}}
+                {
+                    name: "Trade {{ .Id }} stop",
+                    type: "line",
+                    smooth: false,
+                    connectNulls: false,
+                    showSymbol: false,
+                    waveAnimation: false,
+                    renderLabelForZeroData: false,
+                    selectedMode: false,
+                    animation: false,
+                    data: [
+                        {{- range .StopLine }}{{ . }},{{end}}
+                    ]
+                },
+                {{end}}
             ],
             xAxis: {
                 data: xData
@@ -169,7 +209,8 @@
             animation: true,
             dataZoom: [{
                 type: "inside",
-                end: 100
+                start: 35,
+                end: 85
             }, {
                 type: "slider",
                 end: 100

@@ -20,3 +20,13 @@ func (t *Tick) MidPrice() float64 {
 func (t *Tick) BaseTime(duration time.Duration) time.Time {
 	return t.Timestamp.Truncate(duration)
 }
+
+func (t *Tick) DirectionPrice(direction Direction) float64 {
+	switch direction {
+	case Long:
+		return t.Buy
+	case Short:
+		return t.Sell
+	}
+	return 0
+}

@@ -43,10 +43,14 @@ func (r *HistoricalRecord) Localise() {
 type History struct {
 	signals []*Signal
 	bars    Series
+	Sma5    *SMA
+	Sma20   *SMA
 }
 
 func (h *History) AddBar(bar *Bar) {
 	h.bars = append(h.bars, bar)
+	h.Sma20.AddBar(bar)
+	h.Sma5.AddBar(bar)
 }
 
 func (h *History) GetBar(offset int) *Bar {
@@ -120,10 +124,12 @@ func (h *History) PrintReport() {
 		}
 	}
 
-	fmt.Printf("target hits: %d, target miss: %d\n", all.win, all.loss+all.even)
+	fmt.Printf("target profits: %d, break even: %d, loss: %d\n", all.win, all.even, all.loss)
 	// as a percentage of wins
-	fmt.Printf("target hits: %f\n", float64(all.win)/float64(all.win+all.even+all.loss))
-	fmt.Printf("no trades: %d\n", noTrades)
+	fmt.Printf("percentage wins: %0.2f\n", all.winPercentage())
+	fmt.Printf("percentage losses: %0.2f\n", all.lossPercentage())
+	fmt.Printf("percentage even: %0.2f\n", all.evenPercentage())
+	fmt.Printf("no trade signals: %d\n", noTrades)
 	fmt.Printf("biggest profit: %0.2f\thttp://localhost:8081/?d=%s\n", biggestProfit.Profit, biggestProfit.Signal.Bar.Timestamp.Format("2006-01-02-15-04-05-0.json"))
 	fmt.Printf("biggest loss: %0.2f\thttp://localhost:8081/?d=%s\n", biggestLoss.Profit, biggestLoss.Signal.Bar.Timestamp.Format("2006-01-02-15-04-05-0.json"))
 
@@ -131,10 +137,10 @@ func (h *History) PrintReport() {
 	var keys = []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
 	for _, k := range keys {
 		if _, ok := intervals[k]; ok {
-			fmt.Printf("%s win rate: %d (%d/%d)\n", k, intervals[k].winRate(), intervals[k].win, intervals[k].loss)
+			fmt.Printf("%s win rate: %0.2f (%s)\n", k, intervals[k].winPercentage(), intervals[k])
 		}
 	}
-	fmt.Printf("overall win rate: %d (%d/%d)\n", all.winRate(), all.win, all.loss)
+	fmt.Printf("overall win rate: %0.2f (%s)\n", all.winPercentage(), all)
 	fmt.Printf("total profit: %f\n", totalProfit)
 }
 
@@ -377,5 +383,12 @@ func (h *History) createLineChart(signal *Signal) *charts.Kline {
 }
 
 func NewHistory() *History {
-	return &History{}
+	return &History{
+		Sma20: &SMA{
+			Period: 20,
+		},
+		Sma5: &SMA{
+			Period: 5,
+		},
+	}
 }

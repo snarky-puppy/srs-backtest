@@ -4,14 +4,18 @@ import (
 	"log"
 	"math"
 	"time"
+
+	"github.com/mwlazlo/srs/internal"
 )
 
 const (
-	ScanTTL             = time.Hour * 3
-	TrailStopPoints     = 30
-	AddToPositionPoints = 20
-	ShortDt             = "02/01 15:04:05"
-	ShortTime           = "15:04:05"
+	ScanTTL                     = time.Hour * 3
+	TrailStopPoints             = 30
+	AddToPositionPoints         = 20
+	ShortDt                     = "02/01 15:04:05"
+	ShortTime                   = "15:04:05"
+	AddToTradeVelocityThreshold = 10
+	AngleRecordBars             = 10
 )
 
 type MarketConfig interface {
@@ -26,10 +30,11 @@ type EntryScanner interface {
 }
 
 type exchange interface {
-	CreateOrder(direction Direction, open, stop, target float64) *ExTrade
+	CreateOrder(direction Direction, size, open, stop, target float64) *ExTrade
 	ExitPosition(id int) *ExTrade
 	CancelOrder(id int)
 	UpdatePosition(id int, stop, target float64)
+	GetBalance() float64
 }
 
 type TradeManager struct {
@@ -44,6 +49,13 @@ type TradeManager struct {
 	CancelOrdersOnFill bool
 }
 
+func (t *TradeManager) calculateTradeSize(stopPoints float64) float64 {
+	risk := 0.01 * t.exchange.GetBalance() // 1% of account size
+	tradeSize := risk / stopPoints
+	tradeSize = math.Max(tradeSize, 1) // ensure minimum size is 1
+	return internal.Round2(tradeSize)
+}
+
 func (t *TradeManager) PositionClosed(exTrade *ExTrade) {
 	trade := t.positions[exTrade.Id]
 	trade.updateClosed(exTrade)
@@ -53,6 +65,8 @@ func (t *TradeManager) PositionClosed(exTrade *ExTrade) {
 		return
 	}
 	delete(t.positions, trade.Id)
+	trade.ExitAngle5 = t.history.Sma5.GetAngle(AngleRecordBars)
+	trade.ExitAngle20 = t.history.Sma20.GetAngle(AngleRecordBars)
 }
 
 func (t *TradeManager) PositionOpened(exTrade *ExTrade) {
@@ -66,8 +80,11 @@ func (t *TradeManager) PositionOpened(exTrade *ExTrade) {
 		Stop:      trade.StopPrice,
 		Timestamp: trade.EntryTime,
 	})
-	trade.Signal.Trades = append(trade.Signal.Trades, trade)
+	trade.Signal.AddPosition(trade)
 	t.positions[trade.Id] = trade
+
+	trade.EntryAngle5 = t.history.Sma5.GetAngle(AngleRecordBars)
+	trade.EntryAngle20 = t.history.Sma20.GetAngle(AngleRecordBars)
 
 	if t.CancelOrdersOnFill {
 		for id := range t.orders {
@@ -118,19 +135,24 @@ func (t *TradeManager) AddSignal(signal *Signal) {
 }
 
 func (t *TradeManager) CreateOrder(signal *Signal, reason OpenReason, direction Direction, open, stop, target float64) *Trade {
-	exTrade := t.exchange.CreateOrder(direction, open, stop, target)
+	stopPts := internal.Round2(func() float64 {
+		if direction == Long {
+			return open - stop
+		}
+		return stop - open
+	}())
+	stopPts = math.Min(stopPts, MaxStopPts)
+	size := t.calculateTradeSize(stopPts)
+	exTrade := t.exchange.CreateOrder(direction, size, open, stop, target)
 	trade := &Trade{
 		ExTrade:          exTrade,
 		OpenReason:       reason,
 		AutoAdjustStop:   true,
 		LoserThreshold:   15,
 		CanAddToPosition: true,
-		TrailStopPoints: func() float64 {
-			if direction == Long {
-				return open - stop
-			}
-			return stop - open
-		}(),
+		TrailStopPoints:  stopPts,
+		OpenAngle5:       t.history.Sma5.GetAngle(AngleRecordBars),
+		OpenAngle20:      t.history.Sma20.GetAngle(AngleRecordBars),
 	}
 	t.orders[trade.Id] = trade
 	trade.Signal = signal
@@ -151,53 +173,44 @@ func (t *TradeManager) managePositions(tick *Tick) {
 	}
 }
 
-func (t *TradeManager) considerAddingToPosition(bar *Bar, winner *Trade) *Trade {
+func (t *TradeManager) considerAddingToPosition(bar *Bar, winner *Trade) {
 
 	if winner.EntryTime.Truncate(bar.Duration).Equal(bar.Timestamp) {
-		return nil
+		return
 	}
 
-	winner.CanAddToPosition = false // only 1 chance to add to position
+	if winner.CalculatePointsProfit(bar.AvgPrice()) < AddToPositionPoints {
+		return
+	}
 
-	bars := t.history.GetBars(5)
-
-	// before: total profits: 37601
-	// after:  total profits: 19967
-	//if winner.Loser >= 2.5 {
-	//	return nil
-	//}
-
-	// we would add an entry at the top of the previous bar high
-	// so if this bar doesn't reach that high, we don't add
-	// before: 43092
-	// after: 55090
+	// crude velocity check
 	switch winner.Direction {
 	case Long:
-		if bar.High < bars.GetBar(-1).High {
-			return nil
+		if t.history.Sma5.Calculate()-t.history.Sma20.Calculate() < AddToTradeVelocityThreshold {
+			return
 		}
 	case Short:
-		if bar.Low > bars.GetBar(-1).Low {
-			return nil
+		if t.history.Sma20.Calculate()-t.history.Sma5.Calculate() < AddToTradeVelocityThreshold {
+			return
 		}
 	}
 
-	reachedTarget := winner.TargetPrice
-	half := 15.0 // float64(TargetPoints / 2)
-	// adjust stop to target / 2
+	winner.CanAddToPosition = false // a trade can only be added to once
+
+	// if we are long, add an order at the bottom of the previous bar low
+	// if we are short, add an order at the top of the previous bar high
+
+	open := bar.Open
 	switch winner.Direction {
 	case Long:
-		t.exchange.UpdatePosition(winner.Id, winner.TargetPrice-half, 0)
+		open = bar.Low
 	case Short:
-		t.exchange.UpdatePosition(winner.Id, winner.TargetPrice+half, 0)
+		open = bar.High
 	}
-	winner.AutoAdjustStop = true
 
-	newTrade := t.CreateOrder(winner.Signal, OpenReasonAddToPosition, winner.Direction, reachedTarget, winner.StopPrice, winner.TargetPrice)
-	newTrade.AutoAdjustStop = true
-	newTrade.DisableLoserCheck = true
+	newTrade := t.CreateOrder(winner.Signal, OpenReasonAddToPosition, winner.Direction, open, winner.StopPrice, 0)
 	newTrade.IsAdditional = true
-	return newTrade
+	//newTrade.BTL = 5
 }
 
 func (t *TradeManager) managePosition(tick *Tick, trade *Trade) {
@@ -299,7 +312,7 @@ func (t *TradeManager) On5MinBar(tick *Tick, bar *Bar) {
 			continue
 		}
 
-		if !position.IsAdditional && position.CanAddToPosition {
+		if position.CanAddToPosition {
 			t.considerAddingToPosition(bar, position)
 		}
 	}
