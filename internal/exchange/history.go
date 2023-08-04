@@ -44,12 +44,14 @@ type History struct {
 	signals []*Signal
 	bars    Series
 	Sma5    *SMA
-	Sma20   *SMA
+	Sma25   *SMA
+	Sma50   *SMA
 }
 
 func (h *History) AddBar(bar *Bar) {
 	h.bars = append(h.bars, bar)
-	h.Sma20.AddBar(bar)
+	h.Sma50.AddBar(bar)
+	h.Sma25.AddBar(bar)
 	h.Sma5.AddBar(bar)
 }
 
@@ -382,10 +384,31 @@ func (h *History) createLineChart(signal *Signal) *charts.Kline {
 	return line
 }
 
+func (h *History) FindAverageLow(n int) float64 {
+	var sum float64
+	bars := len(h.bars)
+	for i := bars - n; i < bars; i++ {
+		sum += h.bars[i].Low
+	}
+	return sum / float64(n)
+}
+
+func (h *History) FindAverageHigh(n int) float64 {
+	var sum float64
+	bars := len(h.bars)
+	for i := bars - n; i < bars; i++ {
+		sum += h.bars[i].High
+	}
+	return sum / float64(n)
+}
+
 func NewHistory() *History {
 	return &History{
-		Sma20: &SMA{
-			Period: 20,
+		Sma50: &SMA{
+			Period: 50,
+		},
+		Sma25: &SMA{
+			Period: 25,
 		},
 		Sma5: &SMA{
 			Period: 5,

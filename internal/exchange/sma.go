@@ -19,6 +19,11 @@ func (s *SMA) AddBar(bar *Bar) {
 	// calculate and add the current SMA value to the history
 	smaValue := s.Calculate()
 	s.History = append(s.History, smaValue)
+
+	// If the length of history is larger than the period, remove the oldest value.
+	if len(s.History) > 100 {
+		s.History = s.History[1:]
+	}
 }
 
 func (s *SMA) Calculate() float64 {
@@ -56,4 +61,38 @@ func (s *SMA) GetAngle(n int) float64 {
 	angleDeg := angleRad * (180.0 / math.Pi)
 
 	return angleDeg
+}
+
+func (s *SMA) CrossedOver(sma *SMA, n int) bool {
+	if len(s.History) < n || len(sma.History) < n {
+		return false
+	}
+
+	// get the last n values from both SMAs
+	sLastN := s.History[len(s.History)-n:]
+	smaLastN := sma.History[len(sma.History)-n:]
+
+	// if s was initially below sma, and is now above, return true
+	if sLastN[0] < smaLastN[0] && sLastN[n-1] > smaLastN[n-1] {
+		return true
+	}
+
+	return false
+}
+
+func (s *SMA) CrossedUnder(sma *SMA, n int) bool {
+	if len(s.History) < n || len(sma.History) < n {
+		return false
+	}
+
+	// get the last n values from both SMAs
+	sLastN := s.History[len(s.History)-n:]
+	smaLastN := sma.History[len(sma.History)-n:]
+
+	// if s was initially above sma, and is now below, return true
+	if sLastN[0] > smaLastN[0] && sLastN[n-1] < smaLastN[n-1] {
+		return true
+	}
+
+	return false
 }

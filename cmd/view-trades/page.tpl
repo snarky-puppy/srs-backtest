@@ -91,10 +91,10 @@
                     data: data,
                     itemStyle: {
                         normal: {
-                            color: '#ef232a',
-                            color0: '#14b143',
-                            borderColor: '#ef232a',
-                            borderColor0: '#14b143'
+                            color0: '#ef232a',
+                            color: '#14b143',
+                            borderColor0: '#ef232a',
+                            borderColor: '#14b143'
                         }
                     },
                     markArea: {

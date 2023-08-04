@@ -2,6 +2,7 @@ package exchange
 
 import (
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -15,9 +16,11 @@ const (
 type ExitReason string
 
 const (
-	ExitReasonTarget      ExitReason = "target"
-	ExitReasonStopLoss    ExitReason = "stoploss"
-	ExitReasonMarketClose ExitReason = "marketclose"
+	ExitReasonTarget       ExitReason = "target"
+	ExitReasonStopLoss     ExitReason = "stoploss"
+	ExitReasonMarketClose  ExitReason = "marketclose"
+	ExitReasonSmaCross     ExitReason = "sma"
+	ExitReasonSmaCrossStop ExitReason = "smastop"
 )
 
 // StopLog tracks stop adjustments
@@ -38,7 +41,6 @@ type Trade struct {
 	AutoAdjustStop    bool    // if true, trade management will automatically update this trade's stop
 	CanAddToPosition  bool
 	IsAdditional      bool
-	OrderTime         time.Time
 	TrailStopPoints   float64
 	LoserThreshold    float64
 	BTL               int // Bars To Live (close when BTL == 0)
@@ -55,9 +57,7 @@ type Trade struct {
 func (t *Trade) updateClosed(exTrade *ExTrade) {
 	t.ExTrade = exTrade
 	if t.ExitReason == "" {
-		if t.Profit > 0 {
-			t.ExitReason = ExitReasonTarget
-		} else {
+		if math.Abs(t.ExitPrice-t.StopPrice) <= 0.01 {
 			t.ExitReason = ExitReasonStopLoss
 		}
 	}

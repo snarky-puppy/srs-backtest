@@ -66,7 +66,7 @@ func (t *TradeManager) PositionClosed(exTrade *ExTrade) {
 	}
 	delete(t.positions, trade.Id)
 	trade.ExitAngle5 = t.history.Sma5.GetAngle(AngleRecordBars)
-	trade.ExitAngle20 = t.history.Sma20.GetAngle(AngleRecordBars)
+	trade.ExitAngle20 = t.history.Sma25.GetAngle(AngleRecordBars)
 }
 
 func (t *TradeManager) PositionOpened(exTrade *ExTrade) {
@@ -84,7 +84,7 @@ func (t *TradeManager) PositionOpened(exTrade *ExTrade) {
 	t.positions[trade.Id] = trade
 
 	trade.EntryAngle5 = t.history.Sma5.GetAngle(AngleRecordBars)
-	trade.EntryAngle20 = t.history.Sma20.GetAngle(AngleRecordBars)
+	trade.EntryAngle20 = t.history.Sma25.GetAngle(AngleRecordBars)
 
 	if t.CancelOrdersOnFill {
 		for id := range t.orders {
@@ -152,7 +152,7 @@ func (t *TradeManager) CreateOrder(signal *Signal, reason OpenReason, direction 
 		CanAddToPosition: true,
 		TrailStopPoints:  stopPts,
 		OpenAngle5:       t.history.Sma5.GetAngle(AngleRecordBars),
-		OpenAngle20:      t.history.Sma20.GetAngle(AngleRecordBars),
+		OpenAngle20:      t.history.Sma25.GetAngle(AngleRecordBars),
 	}
 	t.orders[trade.Id] = trade
 	trade.Signal = signal
@@ -186,11 +186,11 @@ func (t *TradeManager) considerAddingToPosition(bar *Bar, winner *Trade) {
 	// crude velocity check
 	switch winner.Direction {
 	case Long:
-		if t.history.Sma5.Calculate()-t.history.Sma20.Calculate() < AddToTradeVelocityThreshold {
+		if t.history.Sma5.Calculate()-t.history.Sma25.Calculate() < AddToTradeVelocityThreshold {
 			return
 		}
 	case Short:
-		if t.history.Sma20.Calculate()-t.history.Sma5.Calculate() < AddToTradeVelocityThreshold {
+		if t.history.Sma25.Calculate()-t.history.Sma5.Calculate() < AddToTradeVelocityThreshold {
 			return
 		}
 	}
@@ -259,26 +259,6 @@ func (t *TradeManager) managePosition(tick *Tick, trade *Trade) {
 			how to know if it's a trend or screamer?
 
 	*/
-
-	/*
-		// region target
-		switch trade.Direction {
-		case pp.Long:
-			if bar.High >= trade.Target {
-				trade.CanAddToPosition = true
-				return trade
-			}
-		case pp.Short:
-			if bar.Low <= trade.Target {
-				trade.CanAddToPosition = true
-				return trade
-			}
-		}
-		// endregion target
-
-		return trade
-
-	*/
 }
 
 func (t *TradeManager) UpdatePosition(tick *Tick, trade *Trade, stop, target float64) {
@@ -299,6 +279,7 @@ func (t *TradeManager) UpdatePosition(tick *Tick, trade *Trade, stop, target flo
 }
 
 func (t *TradeManager) On5MinBar(tick *Tick, bar *Bar) {
+
 	for _, position := range t.positions {
 		position.CheckLoser(bar)
 		if position.IsLoser() {
@@ -310,6 +291,41 @@ func (t *TradeManager) On5MinBar(tick *Tick, bar *Bar) {
 				t.exchange.UpdatePosition(position.Id, math.Min(position.StopPrice, bar.High+3), position.OpenPrice)
 			}
 			continue
+		}
+
+		if position.Id == 13 {
+			log.Println("here")
+		}
+
+		// if we are long, and the 25 SMA crosses below the 5 SMA, exit the position
+		if position.Direction == Long {
+			if t.history.Sma25.CrossedOver(t.history.Sma5, 2) {
+				if position.CalculatePointsProfit(bar.Close) <= 0 {
+					// if not in profit, tighten the stop and try to close for break even
+					stop := t.history.FindAverageLow(5)
+					position.ExitReason = ExitReasonSmaCrossStop
+					t.exchange.UpdatePosition(position.Id, stop, position.EntryPrice)
+				} else {
+					// otherwise, just close for profit
+					position.ExitReason = ExitReasonSmaCross
+					t.exchange.ExitPosition(position.Id)
+				}
+				continue
+			}
+		} else {
+			if t.history.Sma5.CrossedOver(t.history.Sma25, 2) {
+				if position.CalculatePointsProfit(bar.Close) <= 0 {
+					// if not in profit, tighten the stop and try to close for break even
+					stop := t.history.FindAverageHigh(5)
+					position.ExitReason = ExitReasonSmaCrossStop
+					t.exchange.UpdatePosition(position.Id, stop, position.EntryPrice)
+				} else {
+					// otherwise, just close for profit
+					position.ExitReason = ExitReasonSmaCross
+					t.exchange.ExitPosition(position.Id)
+				}
+				continue
+			}
 		}
 
 		if position.CanAddToPosition {

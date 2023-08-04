@@ -83,7 +83,6 @@ func (s *Simulator) UpdatePosition(id int, stop, target float64) {
 func (s *Simulator) ExitPosition(id int) *ExTrade {
 	trade := s.positions[id]
 	s.closePosition(trade, s.currentTick)
-	delete(s.positions, id)
 	return trade
 }
 
