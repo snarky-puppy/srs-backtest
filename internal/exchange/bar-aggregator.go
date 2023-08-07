@@ -3,6 +3,8 @@ package exchange
 import (
 	"log"
 	"time"
+
+	"github.com/mwlazlo/srs/internal/models"
 )
 
 type BarAggregator struct {
@@ -10,7 +12,7 @@ type BarAggregator struct {
 	bar      *Bar
 }
 
-func (b *BarAggregator) ProcessTick(tick *Tick) (rv *Bar) {
+func (b *BarAggregator) ProcessTick(tick *models.Tick) (rv *Bar) {
 	if tick == nil && b.bar != nil {
 		b.bar.CloseBar(nil)
 		rv = b.bar

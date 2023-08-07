@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/mwlazlo/srs/internal/models"
 )
 
 type TickReader struct {
@@ -29,7 +31,7 @@ func NewTickReader(filename string) (*TickReader, error) {
 }
 
 // Next reads the next Tick from the CSV file
-func (tr *TickReader) Next() (*Tick, error) {
+func (tr *TickReader) Next() (*models.Tick, error) {
 	record, err := tr.reader.Read()
 	if err != nil {
 		return nil, err
@@ -50,7 +52,7 @@ func (tr *TickReader) Next() (*Tick, error) {
 		return nil, err
 	}
 
-	return &Tick{Timestamp: timestamp.UTC(), Buy: buy, Sell: sell}, nil
+	return &models.Tick{Timestamp: timestamp.UTC(), Buy: buy, Sell: sell}, nil
 }
 
 // Close closes the CSV file

@@ -3,10 +3,12 @@ package exchange
 import (
 	"testing"
 	"time"
+
+	"github.com/mwlazlo/srs/internal/models"
 )
 
 func TestBaseTime(t *testing.T) {
-	tick := Tick{Timestamp: time.Date(2023, 7, 13, 10, 7, 23, 0, time.UTC)}
+	tick := models.Tick{Timestamp: time.Date(2023, 7, 13, 10, 7, 23, 0, time.UTC)}
 	durations := []time.Duration{
 		1 * time.Minute,
 		2 * time.Minute,

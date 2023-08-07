@@ -1,4 +1,4 @@
-package main
+package td365
 
 import (
 	"bytes"
@@ -18,116 +18,14 @@ import (
 
 const UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0"
 
-type MarketGroup struct {
-	D []struct {
-		Type                      string `json:"__type"`
-		ID                        int    `json:"ID"`
-		Name                      string `json:"Name"`
-		IsSuperGroup              bool   `json:"IsSuperGroup"`
-		IsWhiteLabelPopularMarket bool   `json:"IsWhiteLabelPopularMarket"`
-		HasSubscription           bool   `json:"HasSubscription"`
-	} `json:"d"`
-}
-
-type FetchQuoteRequest struct {
-	GroupID   string `json:"groupID"`
-	Keyword   string `json:"keyword"`
-	Portfolio bool   `json:"portfolio"`
-	Search    bool   `json:"search"`
-	Popular   bool   `json:"popular"`
-}
-
-type PopularQuotes []MarketQuote
-
-func (q PopularQuotes) Find(s string) (MarketQuote, bool) {
-	for _, quote := range q {
-		if quote.MarketName == s {
-			return quote, true
-		}
-	}
-	return MarketQuote{}, false
-}
-
-type FetchQuoteResponse struct {
-	D []MarketQuote `json:"d"`
-}
-type MarketQuote struct {
-	Type                  string  `json:"__type"`
-	MarketID              int     `json:"MarketID"`
-	QuoteID               int     `json:"QuoteID"`
-	AtQuoteAtMarket       int     `json:"AtQuoteAtMarket"`
-	ExchangeID            int     `json:"ExchangeID"`
-	PrcGenFractionalPrice int     `json:"PrcGenFractionalPrice"`
-	PrcGenDecimalPlaces   int     `json:"PrcGenDecimalPlaces"`
-	High                  int     `json:"High"`
-	Low                   int     `json:"Low"`
-	DailyChange           int     `json:"DailyChange"`
-	Bid                   int     `json:"Bid"`
-	Ask                   int     `json:"Ask"`
-	BetPer                float64 `json:"BetPer"`
-	IsGSLPercent          int     `json:"IsGSLPercent"`
-	GSLDis                float64 `json:"GSLDis"`
-	MinCloseOrderDisTicks float64 `json:"MinCloseOrderDisTicks"`
-	MinOpenOrderDisTicks  float64 `json:"MinOpenOrderDisTicks"`
-	DisplayBetPer         float64 `json:"DisplayBetPer"`
-	IsInPortfolio         bool    `json:"IsInPortfolio"`
-	Tradable              bool    `json:"Tradable"`
-	TradeOnWeb            bool    `json:"TradeOnWeb"`
-	CallOnly              bool    `json:"CallOnly"`
-	MarketName            string  `json:"MarketName"`
-	TradeStartTime        string  `json:"TradeStartTime"`
-	Currency              string  `json:"Currency"`
-	AllowGtdsStops        int     `json:"AllowGtdsStops"`
-	ForceOpen             bool    `json:"ForceOpen"`
-	Margin                float64 `json:"Margin"`
-	MarginType            bool    `json:"MarginType"`
-	GSLCharge             float32 `json:"GSLCharge"`
-	IsGSLChargePercent    int     `json:"IsGSLChargePercent"`
-	Spread                float64 `json:"Spread"`
-	TradeRateType         int     `json:"TradeRateType"`
-	OpenTradeRate         float32 `json:"OpenTradeRate"`
-	CloseTradeRate        float32 `json:"CloseTradeRate"`
-	MinOpenTradeRate      float32 `json:"MinOpenTradeRate"`
-	MinCloseTradeRate     float32 `json:"MinCloseTradeRate"`
-	PriceDecimal          float64 `json:"PriceDecimal"`
-	Subscription          bool    `json:"Subscription"`
-	SuperGroupID          int     `json:"SuperGroupID"`
-}
-
-type FormData struct {
-	Action                  string
-	__EVENTTARGET           string
-	__EVENTARGUMENT         string
-	__VIEWSTATE             string
-	__VIEWSTATEGENERATOR    string
-	__EVENTVALIDATION       string
-	hfLanguageID            string
-	hfPlatform              string
-	hfTradingLevel          string
-	hfParentChildType       string
-	hfWhiteLabelID          string
-	hfAccountID             string
-	hfTradingCurrencySymbol string
-	hfTradingCurrencyCode   string
-	hfAvailableCurrency     string
-	hfClientTypeID          string
-	hfPlatformID            string
-	hfTradingMode           string
-	hfEnablePolling         string
-	hfSafeChargeUrl         string
-	hfLoginID               string
-	hfHomeEmail             string
-	hfClientName            string
-	hfSessionID             string
-	hfWebStreaming          string
-}
-
 // UserAgentTransport is custom Transport that adds the User-Agent header to each request.
 type UserAgentTransport struct {
-	Transport  http.RoundTripper
-	UserAgent  string
-	Referer    string
-	CurrentUrl string
+	Transport     http.RoundTripper
+	UserAgent     string
+	Referer       string
+	CurrentUrl    string
+	Authorization string
+	Origin        string
 }
 
 // RoundTrip implements the RoundTripper interface.
@@ -135,6 +33,10 @@ func (t *UserAgentTransport) RoundTrip(req *http.Request) (*http.Response, error
 	// Add the User-Agent header to the request
 	req.Header.Set("User-Agent", t.UserAgent)
 	req.Header.Set("Referer", t.Referer)
+
+	if t.Authorization != "" {
+		req.Header.Set("Authorization", t.Authorization)
+	}
 
 	// Perform the actual request using the underlying Transport
 	return t.Transport.RoundTrip(req)
@@ -176,16 +78,13 @@ func NewScraper() *Scraper {
 			},
 		},
 	}
-	uat = &UserAgentTransport{
-		Transport: scraper.client.Transport,
-		UserAgent: UserAgent,
-	}
-	scraper.uat = uat
-
-	scraper.client.Transport = uat
 
 	scraper.OpenDemo()
-	scraper.connection = NewConnectionProxy("DEMO", scraper.formData.hfLoginID, scraper.formData.hfPlatform)
+	scraper.connection = NewConnectionProxy(uat.CurrentUrl, Account{
+		AccountType:     "DEMO",
+		CtLoginId:       scraper.formData.hfLoginID,
+		CtLoginPassword: scraper.formData.hfPlatform,
+	})
 
 	scraper.updateSessionToken()
 	go func() {

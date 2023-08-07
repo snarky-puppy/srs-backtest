@@ -3,71 +3,49 @@ package exchange
 import (
 	"errors"
 	"io"
-	"time"
 
 	"github.com/mwlazlo/srs/internal"
+	"github.com/mwlazlo/srs/internal/models"
+	"github.com/mwlazlo/srs/internal/td365"
 )
 
-type ExTradeStatus int
-
-const (
-	Order ExTradeStatus = iota
-	Position
-	Closed
-)
-
-// exchange idea of trade is much simpler than the strategy's idea of a trade
-type ExTrade struct {
-	Id           int
-	Size         float64
-	Status       ExTradeStatus
-	Direction    Direction
-	OpenTime     time.Time
-	OpenPrice    float64
-	EntryTime    time.Time
-	EntryPrice   float64
-	ExitTime     time.Time
-	ExitPrice    float64
-	StopPrice    float64
-	TargetPrice  float64
-	Balance      float64
-	Profit       float64
-	PointsProfit float64
-}
-
-func (t *ExTrade) close(tick *Tick, balance float64) (newBalance float64) {
-	t.Status = Closed
+func closeTrade(t *models.Trade, tick *models.Tick, balance float64) (newBalance float64) {
+	t.Status = models.Closed
 	t.ExitTime = tick.Timestamp
 	t.ExitPrice = tick.MidPrice()
-	t.PointsProfit = t.CalculatePointsProfit(t.ExitPrice)
-	t.Profit = t.CalculateRealProfit(t.ExitPrice)
+	t.PointsProfit = calculatePointsProfit(t, t.ExitPrice)
+	t.Profit = calculateRealProfit(t, t.ExitPrice)
 	newBalance = internal.Round2(balance + t.Profit)
 	t.Balance = newBalance
 	return
 }
 
-func (t *ExTrade) CalculatePointsProfit(close float64) float64 {
+func calculatePointsProfit(t *models.Trade, close float64) float64 {
 	switch t.Direction {
-	case Long:
+	case models.Long:
 		return internal.Round2(close - t.EntryPrice)
-	case Short:
+	case models.Short:
 		return internal.Round2(t.EntryPrice - close)
 	}
 	return 0
 }
 
-func (t *ExTrade) CalculateRealProfit(close float64) float64 {
-	return internal.Round2(t.Size * t.CalculatePointsProfit(close))
+func calculateRealProfit(t *models.Trade, close float64) float64 {
+	return internal.Round2(t.Size * calculatePointsProfit(t, close))
 }
 
 type Simulator struct {
 	reader       *TickReader // internally generate ticks, like a real exchange
-	positions    map[int]*ExTrade
-	orders       map[int]*ExTrade
+	positions    map[int]*models.Trade
+	orders       map[int]*models.Trade
 	tradeId      int
-	currentTick  *Tick
-	tradeManager *TradeManager
+	currentTick  *models.Tick
+	tradeManager *MarketContext
 	balance      float64
+}
+
+func (s *Simulator) GetPopularMarkets() td365.MarketGroup {
+	return td365.MarketGroup{}
 }
 
 func (s *Simulator) GetBalance() float64 {
@@ -80,7 +58,7 @@ func (s *Simulator) UpdatePosition(id int, stop, target float64) {
 	trade.TargetPrice = target
 }
 
-func (s *Simulator) ExitPosition(id int) *ExTrade {
+func (s *Simulator) ExitPosition(id int) *models.Trade {
 	trade := s.positions[id]
 	s.closePosition(trade, s.currentTick)
 	return trade
@@ -113,21 +91,22 @@ func (s *Simulator) ProcessTicks() {
 	}
 }
 
-func (s *Simulator) addTick(tick *Tick) {
+func (s *Simulator) addTick(tick *models.Tick) {
 
 	s.currentTick = tick
 
 	// check for stop loss or take profit
 	for _, trade := range s.positions {
-		currentPrice := tick.MidPrice()
 		switch trade.Direction {
-		case Long:
+		case models.Long:
+			currentPrice := tick.Buy
 			if trade.StopPrice != 0 && currentPrice <= trade.StopPrice {
 				s.closePosition(trade, tick)
 			} else if trade.TargetPrice != 0 && currentPrice >= trade.TargetPrice {
 				s.closePosition(trade, tick)
 			}
-		case Short:
+		case models.Short:
+			currentPrice := tick.Sell
 			if trade.StopPrice != 0 && currentPrice >= trade.StopPrice {
 				s.closePosition(trade, tick)
 			} else if trade.TargetPrice != 0 && currentPrice <= trade.TargetPrice {
@@ -139,11 +118,11 @@ func (s *Simulator) addTick(tick *Tick) {
 	// check if orders should be filled
 	for _, trade := range s.orders {
 		switch trade.Direction {
-		case Long:
+		case models.Long:
 			if tick.Buy >= trade.OpenPrice {
 				s.enterPosition(trade, tick)
 			}
-		case Short:
+		case models.Short:
 			if tick.Sell <= trade.OpenPrice {
 				s.enterPosition(trade, tick)
 			}
@@ -151,12 +130,12 @@ func (s *Simulator) addTick(tick *Tick) {
 	}
 }
 
-func (s *Simulator) CreateOrder(direction Direction, size, open, stop, target float64) *ExTrade {
+func (s *Simulator) CreateOrder(symbol models.Symbol, direction models.Direction, size, open, stop, target float64) *models.Trade {
 	s.tradeId++
-	trade := &ExTrade{
+	trade := &models.Trade{
 		Id:          s.tradeId,
 		Size:        size,
-		Status:      Order,
+		Status:      models.Order,
 		Direction:   direction,
 		OpenPrice:   open,
 		OpenTime:    s.currentTick.Timestamp,
@@ -167,17 +146,17 @@ func (s *Simulator) CreateOrder(direction Direction, size, open, stop, target fl
 	return trade
 }
 
-func (s *Simulator) enterPosition(trade *ExTrade, tick *Tick) {
+func (s *Simulator) enterPosition(trade *models.Trade, tick *models.Tick) {
 	trade.EntryTime = tick.Timestamp
 	trade.EntryPrice = tick.DirectionPrice(trade.Direction)
-	trade.Status = Position
+	trade.Status = models.Position
 	delete(s.orders, trade.Id)
 	s.positions[trade.Id] = trade
 	s.tradeManager.PositionOpened(trade)
 }
 
-func (s *Simulator) closePosition(trade *ExTrade, tick *Tick) {
-	s.balance = trade.close(tick, s.balance)
+func (s *Simulator) closePosition(trade *models.Trade, tick *models.Tick) {
+	s.balance = closeTrade(trade, tick, s.balance)
 	delete(s.positions, trade.Id)
 	s.tradeManager.PositionClosed(trade)
 }
@@ -197,7 +176,7 @@ func (s *Simulator) CloseAllOrders() {
 }
 */
 
-func NewExchangeSimulator(file string, handler *TradeManager) *Simulator {
+func NewExchangeSimulator(file string, handler *MarketContext) *Simulator {
 	reader, err := NewTickReader(file)
 	if err != nil {
 		panic(err)
@@ -205,8 +184,8 @@ func NewExchangeSimulator(file string, handler *TradeManager) *Simulator {
 	rv := &Simulator{
 		reader:       reader,
 		tradeManager: handler,
-		positions:    make(map[int]*ExTrade),
-		orders:       make(map[int]*ExTrade),
+		positions:    make(map[int]*models.Trade),
+		orders:       make(map[int]*models.Trade),
 		balance:      3_450,
 	}
 	return rv

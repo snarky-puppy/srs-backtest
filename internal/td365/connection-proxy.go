@@ -1,4 +1,4 @@
-package main
+package td365
 
 import (
 	"bytes"
@@ -15,6 +15,22 @@ import (
 	"github.com/mwlazlo/srs/internal/pp"
 )
 
+func ApiUrl(environment string) (origin, mainUrl string) {
+	switch environment {
+	case "LIVE", "PROD":
+		mainUrl = "prod-api.finsa.com.au"
+		origin = "traders.td365.com"
+		break
+	case "DEMO":
+		mainUrl = "demo-api.finsa.com.au"
+		origin = "demo.tradedirect365.com.au"
+		break
+	default:
+		panic("invalid environment")
+	}
+	return
+}
+
 type ConnectionProxy struct {
 	token              string
 	mainUrl            string
@@ -26,6 +42,7 @@ type ConnectionProxy struct {
 	PriceCh            chan *pp.Price
 	connectionId       *string
 	receiveAuthOK      chan bool
+	originUrl          string
 }
 
 func (c *ConnectionProxy) ConnectLoop() {
@@ -59,27 +76,13 @@ func (c *ConnectionProxy) ConnectLoop() {
 	}()
 }
 
-func NewConnectionProxy(environment, loginId, tradingAccountType string) *ConnectionProxy {
-	var (
-		mainUrl string
-	)
-
-	switch environment {
-	case "PROD":
-		mainUrl = "prod-api.finsa.com.au"
-		break
-	case "DEMO":
-		mainUrl = "demo-api.finsa.com.au"
-		break
-	default:
-		panic("invalid environment")
-	}
+func NewConnectionProxy(platformURL string, account Account) *ConnectionProxy {
 
 	rv := &ConnectionProxy{
-		loginId:            loginId,
-		tradingAccountType: tradingAccountType,
-		mainUrl:            fmt.Sprintf("https://%s", mainUrl),
-		websocketUrl:       fmt.Sprintf("wss://%s", mainUrl),
+		loginId:            account.CtLoginId,
+		tradingAccountType: account.AccountType,
+		originUrl:          platformURL,
+		websocketUrl:       account.WsUrl(),
 		PriceCh:            make(chan *pp.Price, 10),
 		receiveAuthOK:      make(chan bool, 0),
 	}
@@ -140,7 +143,7 @@ func (c *ConnectionProxy) Dial() {
 
 	headers := http.Header{}
 	headers.Set("User-Agent", UserAgent)
-	headers.Set("Origin", "https://demo.tradedirect365.com.au")
+	headers.Set("Origin", c.originUrl)
 
 	log.Printf("Connecting to WebSocket server: %s", c.websocketUrl)
 

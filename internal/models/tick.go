@@ -1,4 +1,4 @@
-package exchange
+package models
 
 import (
 	"time"
@@ -7,6 +7,7 @@ import (
 )
 
 type Tick struct {
+	Symbol    Symbol
 	Timestamp time.Time
 	Buy       float64
 	Sell      float64

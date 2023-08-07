@@ -1,0 +1,92 @@
+{
+  "d": [
+    {
+      "__type": "TradingPlatform.TreeMarketGroup",
+      "ID": 991,
+      "Name": "Popular Markets",
+      "IsSuperGroup": true,
+      "IsWhiteLabelPopularMarket": true,
+      "HasSubscription": false
+    },
+    {
+      "__type": "TradingPlatform.TreeMarketGroup",
+      "ID": 41,
+      "Name": "Cryptocurrency",
+      "IsSuperGroup": true,
+      "IsWhiteLabelPopularMarket": false,
+      "HasSubscription": false
+    },
+    {
+      "__type": "TradingPlatform.TreeMarketGroup",
+      "ID": 1,
+      "Name": "Indices",
+      "IsSuperGroup": true,
+      "IsWhiteLabelPopularMarket": false,
+      "HasSubscription": false
+    },
+    {
+      "__type": "TradingPlatform.TreeMarketGroup",
+      "ID": 20,
+      "Name": "FX",
+      "IsSuperGroup": true,
+      "IsWhiteLabelPopularMarket": false,
+      "HasSubscription": false
+    },
+    {
+      "__type": "TradingPlatform.TreeMarketGroup",
+      "ID": 2,
+      "Name": "Shares - UK              ",
+      "IsSuperGroup": true,
+      "IsWhiteLabelPopularMarket": false,
+      "HasSubscription": false
+    },
+    {
+      "__type": "TradingPlatform.TreeMarketGroup",
+      "ID": 5,
+      "Name": "Shares - US",
+      "IsSuperGroup": true,
+      "IsWhiteLabelPopularMarket": false,
+      "HasSubscription": false
+    },
+    {
+      "__type": "TradingPlatform.TreeMarketGroup",
+      "ID": 38,
+      "Name": "Shares - Denmark",
+      "IsSuperGroup": true,
+      "IsWhiteLabelPopularMarket": false,
+      "HasSubscription": false
+    },
+    {
+      "__type": "TradingPlatform.TreeMarketGroup",
+      "ID": 7,
+      "Name": "Shares - European",
+      "IsSuperGroup": true,
+      "IsWhiteLabelPopularMarket": false,
+      "HasSubscription": false
+    },
+    {
+      "__type": "TradingPlatform.TreeMarketGroup",
+      "ID": 33,
+      "Name": "Bonds",
+      "IsSuperGroup": true,
+      "IsWhiteLabelPopularMarket": false,
+      "HasSubscription": false
+    },
+    {
+      "__type": "TradingPlatform.TreeMarketGroup",
+      "ID": 35,
+      "Name": "Energy",
+      "IsSuperGroup": true,
+      "IsWhiteLabelPopularMarket": false,
+      "HasSubscription": false
+    },
+    {
+      "__type": "TradingPlatform.TreeMarketGroup",
+      "ID": 32,
+      "Name": "Metals",
+      "IsSuperGroup": true,
+      "IsWhiteLabelPopularMarket": false,
+      "HasSubscription": false
+    }
+  ]
+}

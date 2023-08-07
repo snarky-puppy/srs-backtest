@@ -7,6 +7,7 @@ import (
 
 	"github.com/mwlazlo/srs/internal"
 	"github.com/mwlazlo/srs/internal/pp"
+	"github.com/mwlazlo/srs/internal/td365"
 )
 
 func main() {
@@ -18,7 +19,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	scraper := NewScraper()
+	scraper := td365.NewScraper()
 	quoteToName := map[int]string{}
 
 	for _, q := range scraper.PopularQuotes {

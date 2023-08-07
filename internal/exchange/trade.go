@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"math"
 	"time"
+
+	"github.com/mwlazlo/srs/internal/models"
 )
 
 type OpenReason string
@@ -30,7 +32,7 @@ type StopLog struct {
 }
 
 type Trade struct {
-	*ExTrade
+	*models.Trade
 	StopLog    []*StopLog
 	OpenReason OpenReason
 	ExitReason ExitReason
@@ -44,18 +46,9 @@ type Trade struct {
 	TrailStopPoints   float64
 	LoserThreshold    float64
 	BTL               int // Bars To Live (close when BTL == 0)
-
-	OpenAngle5  float64
-	EntryAngle5 float64
-	ExitAngle5  float64
-
-	OpenAngle20  float64
-	EntryAngle20 float64
-	ExitAngle20  float64
 }
 
-func (t *Trade) updateClosed(exTrade *ExTrade) {
-	t.ExTrade = exTrade
+func (t *Trade) updateClosed(exTrade *models.Trade) {
 	if t.ExitReason == "" {
 		if math.Abs(t.ExitPrice-t.StopPrice) <= 0.01 {
 			t.ExitReason = ExitReasonStopLoss
@@ -115,9 +108,9 @@ func (t *Trade) CheckLoser(bar *Bar) {
 	isStraddle := bar.High > t.OpenPrice && bar.Low < t.OpenPrice
 	isSunken := false
 	switch t.Direction {
-	case Long:
+	case models.Long:
 		isSunken = bar.High < t.OpenPrice
-	case Short:
+	case models.Short:
 		isSunken = bar.Low > t.OpenPrice
 	}
 

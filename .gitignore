@@ -30,3 +30,4 @@ data/td/raw
 data/td/raw2
 data/dax
 data/reports
+*.env

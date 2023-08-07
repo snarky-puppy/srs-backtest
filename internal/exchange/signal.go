@@ -3,6 +3,8 @@ package exchange
 import (
 	"math"
 	"time"
+
+	"github.com/mwlazlo/srs/internal/models"
 )
 
 const (
@@ -16,7 +18,7 @@ type Signals []*Signal
 type Signal struct {
 	Bar        *Bar
 	Trades     []*Trade
-	CanTradeFn func(*Signal, Direction) bool `json:"-"`
+	CanTradeFn func(*Signal, models.Direction) bool `json:"-"`
 }
 
 // High returns higher signal breakout with increasing number of trades
@@ -29,7 +31,7 @@ func (s *Signal) Low() float64 {
 	return s.Bar.Low - 3.0 - (float64(len(s.Trades)) * 2.0)
 }
 
-func (s *Signal) CanTrade(direction Direction) bool {
+func (s *Signal) CanTrade(direction models.Direction) bool {
 	if s.CanTradeFn != nil {
 		return s.CanTradeFn(s, direction)
 	}
@@ -57,13 +59,13 @@ func (s *Signal) EncodeableClone() *Signal {
 	}
 }
 
-func (s *Signal) EST(direction Direction) (entry, stop, target float64) {
+func (s *Signal) EST(direction models.Direction) (entry, stop, target float64) {
 	switch direction {
-	case Long:
+	case models.Long:
 		entry = s.High()
 		target = entry + TargetPoints
 		stop = math.Max(s.Bar.Low, entry-MaxStopPts)
-	case Short:
+	case models.Short:
 		entry = s.Low()
 		target = entry - TargetPoints
 		stop = math.Min(s.Bar.High, entry+MaxStopPts)
