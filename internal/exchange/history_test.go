@@ -1,10 +1,14 @@
 package exchange
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/mwlazlo/srs/internal/models"
+)
 
 func TestHistory_FindAverageHigh(t *testing.T) {
 	h := History{
-		bars: []*Bar{
+		bars: []*models.Bar{
 			{High: 1},
 			{High: 2},
 			{High: 3},
@@ -21,7 +25,7 @@ func TestHistory_FindAverageHigh(t *testing.T) {
 
 func TestHistory_FindAverageLow(t *testing.T) {
 	h := History{
-		bars: []*Bar{
+		bars: []*models.Bar{
 			{Low: 1},
 			{Low: 2},
 			{Low: 3},

@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/go-echarts/go-echarts/v2/charts"
 	"github.com/go-echarts/go-echarts/v2/opts"
 	"github.com/go-echarts/go-echarts/v2/types"
+	"github.com/mwlazlo/srs/internal/models"
 )
 
 const (
@@ -18,7 +20,7 @@ const (
 
 type HistoricalRecord struct {
 	Signal   *Signal
-	Context  Series
+	Context  models.Series
 	Timezone string
 }
 
@@ -42,27 +44,27 @@ func (r *HistoricalRecord) Localise() {
 
 type History struct {
 	signals []*Signal
-	bars    Series
+	bars    models.Series
 	Sma5    *SMA
 	Sma25   *SMA
 	Sma50   *SMA
 }
 
-func (h *History) AddBar(bar *Bar) {
+func (h *History) AddBar(bar *models.Bar) {
 	h.bars = append(h.bars, bar)
 	h.Sma50.AddBar(bar)
 	h.Sma25.AddBar(bar)
 	h.Sma5.AddBar(bar)
 }
 
-func (h *History) GetBar(offset int) *Bar {
+func (h *History) GetBar(offset int) *models.Bar {
 	if len(h.bars) == 0 || int(math.Abs(float64(offset))) > len(h.bars) {
 		return nil
 	}
 	return h.bars[h.CurrentIndex()+offset]
 }
 
-func (h *History) GetBars(index int) Series {
+func (h *History) GetBars(index int) models.Series {
 	if index < 0 {
 		panic("index must be positive")
 	}
@@ -184,44 +186,6 @@ func (h *History) saveSignalData(signal *Signal, fileName string, location *time
 	if err != nil {
 		panic(err)
 	}
-	/*
-		line := h.createLineChart(signal)
-
-		f, err := os.Create(fileName)
-		if err != nil {
-			panic(err)
-		}
-
-		page := components.NewPage()
-		//page.Initialization.AssetsHost = "/static/"
-		page.AddCharts(line)
-		err = page.Render(f)
-		if err != nil {
-			panic(err)
-		}
-
-		td := func(inner any) string {
-			return fmt.Sprint("<td>", inner, "</td>")
-		}
-
-		var pl float64
-		for _, trade := range signal.Trades {
-			pl += trade.Profit
-		}
-
-		summary := strings.Builder{}
-		summary.WriteString("<hr/><table border=1><tr>")
-		summary.WriteString(fmt.Sprintln("<tr><th>signal</th>", td(signal.Bar.Timestamp.Format("15:04")), td(signal.Bar.High), td(signal.Bar.Low), "<td></td><td></td></tr>"))
-		summary.WriteString("<tr><th></th><th>Time</th><th>Price</th><th>Dir/Result</th><th>Reason</th>")
-		for _, trade := range signal.Trades {
-			summary.WriteString(fmt.Sprintln("<tr><th>entry</th>", td(trade.OpenTime.Format("15:04")), td(trade.OpenPrice), td(trade.Direction), td(trade.OpenReason), "</tr>"))
-			summary.WriteString(fmt.Sprintln("<tr><th>exit</th>", td(trade.ExitTime.Format("15:04")), td(trade.ExitPrice), td(trade.Profit), td(trade.ExitReason), "</tr>"))
-		}
-		summary.WriteString(fmt.Sprintf("<tr><th></th><th></th><th></th><th></th><th>%0.2f</th><th></th>", pl))
-		summary.WriteString("</table>")
-		_, _ = f.Write([]byte(summary.String()))
-		_ = f.Close()
-	*/
 }
 
 func (h *History) createLineChart(signal *Signal) *charts.Kline {
@@ -369,7 +333,26 @@ func (h *History) createLineChart(signal *Signal) *charts.Kline {
 
 	//}
 
-	data := h.bars.SignalContext(signal)
+	// region data context
+	start := signal.Bar.Timestamp.Add(-(2 * signal.Bar.Duration))
+	var end = start.Add(1 * time.Hour)
+	if len(signal.Trades) > 0 {
+		for _, t := range signal.Trades {
+			if t.ExitTime.After(end) {
+				end = t.ExitTime.Add(30 * time.Minute)
+			}
+		}
+	}
+
+	// find index of start, use binary search
+	startIdx := sort.Search(len(h.bars), func(i int) bool {
+		return h.bars[i].Timestamp.After(start)
+	})
+	endIdx := sort.Search(len(h.bars), func(i int) bool {
+		return h.bars[i].Timestamp.After(end)
+	})
+	data := h.bars[startIdx:endIdx]
+	// endregion data context
 
 	line.SetXAxis(data.ToChartXAxis()).
 		AddSeries("", data.ToChartData(), opt...)
@@ -400,6 +383,10 @@ func (h *History) FindAverageHigh(n int) float64 {
 		sum += h.bars[i].High
 	}
 	return sum / float64(n)
+}
+
+func (h *History) Backfill(bars models.Series) {
+
 }
 
 func NewHistory() *History {

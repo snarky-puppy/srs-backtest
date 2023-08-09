@@ -22,9 +22,12 @@ func main() {
 	ctx := internal.GetGracefulCtx()
 
 	strat1 := strategy.SrsEntry{}
-	cm := exchange.NewContextManager(&strat1)
+	cm := exchange.NewContextManager(exchange.ContextManagerInput{
+		Scanners: []exchange.EntryScanner{&strat1},
+		Config:   &strat1,
+	})
 	platform := td365.LaunchPlatform(ctx, DemoAccountId, cm)
 	cm.SetExchange(platform)
-	cm.SubscribeAll()
+	cm.Initialise()
 
 }

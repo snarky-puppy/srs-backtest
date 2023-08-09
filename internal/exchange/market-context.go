@@ -17,13 +17,6 @@ const (
 	AngleRecordBars             = 10
 )
 
-type MarketConfig interface {
-	MarketOpen(t time.Time) time.Time
-	MarketClose(t time.Time) time.Time
-	IsOpen(t time.Time) bool
-	Location() *time.Location
-}
-
 type Platform interface {
 	CreateOrder(symbol models.Symbol, direction models.Direction, size, open, stop, target float64) *models.Trade
 	ExitPosition(id int) *models.Trade
@@ -34,12 +27,12 @@ type Platform interface {
 
 type MarketContext struct {
 	exchange           Platform
-	aggregator         *BarAggregator
+	aggregator         *models.BarAggregator
 	scanner            EntryScanner
 	orders             map[int]*Trade
 	positions          map[int]*Trade
 	activeSignals      *Signals
-	marketConfig       MarketConfig
+	marketConfig       models.MarketConfig
 	history            *History
 	CancelOrdersOnFill bool
 }
@@ -87,7 +80,7 @@ func (t *MarketContext) PositionOpened(exTrade *models.Trade) {
 }
 
 func (t *MarketContext) HandleTick(tick *models.Tick) {
-	bar := t.aggregator.ProcessTick(tick)
+	bar := t.aggregator.AddTick(tick)
 	if bar != nil {
 		t.history.AddBar(bar)
 
@@ -159,7 +152,7 @@ func (t *MarketContext) managePositions(tick *models.Tick) {
 	}
 }
 
-func (t *MarketContext) considerAddingToPosition(bar *Bar, winner *Trade) {
+func (t *MarketContext) considerAddingToPosition(bar *models.Bar, winner *Trade) {
 
 	if winner.EntryTime.Truncate(bar.Duration).Equal(bar.Timestamp) {
 		return
@@ -235,7 +228,7 @@ func (t *MarketContext) UpdatePosition(tick *models.Tick, trade *Trade, stop, ta
 	t.exchange.UpdatePosition(trade.Id, stop, 0)
 }
 
-func (t *MarketContext) On5MinBar(tick *models.Tick, bar *Bar) {
+func (t *MarketContext) On5MinBar(tick *models.Tick, bar *models.Bar) {
 
 	for _, position := range t.positions {
 		position.CheckLoser(bar)
@@ -291,13 +284,20 @@ func (t *MarketContext) On5MinBar(tick *models.Tick, bar *Bar) {
 	}
 }
 
-func NewMarketContext(scanner EntryScanner) *MarketContext {
+func (t *MarketContext) Backfill(bars models.Series) {
+	for _, bar := range bars {
+		t.history.AddBar(bar)
+	}
+}
+
+func NewMarketContext(config models.MarketConfig, scanner ...EntryScanner) *MarketContext {
 	rv := &MarketContext{
-		aggregator: NewBarAggregator(time.Minute * 5),
-		scanner:    scanner,
-		orders:     make(map[int]*Trade),
-		positions:  make(map[int]*Trade),
-		history:    NewHistory(),
+		aggregator:   models.NewBarAggregator(time.Minute * 5),
+		scanner:      scanner[0], // FIXME
+		orders:       make(map[int]*Trade),
+		positions:    make(map[int]*Trade),
+		history:      NewHistory(),
+		marketConfig: config,
 	}
 	return rv
 }

@@ -35,6 +35,7 @@ type TradeManager interface {
 	HandleTick(tick *models.Tick)
 	PositionOpened(trade *models.Trade)
 	PositionClosed(trade *models.Trade)
+	Backfill(symbol models.Symbol, bars models.Series)
 }
 
 type Portal struct {
@@ -100,7 +101,7 @@ func LaunchPlatform(ctx context.Context, accountId int, tradeManager TradeManage
 	//	portal.Account.Platform)
 
 	//return portal
-	return newPlatform(portal.client, uat, portal.Account)
+	return newPlatform(portal.client, uat, portal.Account, tradeManager)
 }
 
 func (p *Portal) Login() {

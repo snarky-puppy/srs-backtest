@@ -1,10 +1,8 @@
-package exchange
+package models
 
 import (
 	"log"
 	"time"
-
-	"github.com/mwlazlo/srs/internal/models"
 )
 
 type BarAggregator struct {
@@ -12,7 +10,7 @@ type BarAggregator struct {
 	bar      *Bar
 }
 
-func (b *BarAggregator) ProcessTick(tick *models.Tick) (rv *Bar) {
+func (b *BarAggregator) AddTick(tick *Tick) (rv *Bar) {
 	if tick == nil && b.bar != nil {
 		b.bar.CloseBar(nil)
 		rv = b.bar
@@ -38,6 +36,31 @@ func (b *BarAggregator) ProcessTick(tick *models.Tick) (rv *Bar) {
 		}
 	}
 	return
+}
+
+func (b *BarAggregator) AddBar(bar *Bar) (rv *Bar) {
+	if b.bar == nil {
+		b.bar = bar
+		b.bar.Duration = b.duration
+	} else {
+		if bar.Timestamp.Truncate(b.duration).Before(b.bar.Timestamp) {
+			log.Printf("Bar %v is before current bar %v", bar, b.bar)
+			return
+		}
+		if bar.Timestamp.Truncate(b.duration) != b.bar.Timestamp {
+			rv = b.bar
+			b.bar = bar
+			b.bar.Timestamp = b.bar.Timestamp.Truncate(b.duration)
+			b.bar.Duration = b.duration
+		} else {
+			b.bar.Add(bar)
+		}
+	}
+	return
+}
+
+func (b *BarAggregator) LastBar() *Bar {
+	return b.bar
 }
 
 func NewBarAggregator(duration time.Duration) *BarAggregator {

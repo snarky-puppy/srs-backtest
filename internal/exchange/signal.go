@@ -16,7 +16,7 @@ const (
 type Signals []*Signal
 
 type Signal struct {
-	Bar        *Bar
+	Bar        *models.Bar
 	Trades     []*Trade
 	CanTradeFn func(*Signal, models.Direction) bool `json:"-"`
 }

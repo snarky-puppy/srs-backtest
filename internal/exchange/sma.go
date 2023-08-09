@@ -1,6 +1,10 @@
 package exchange
 
-import "math"
+import (
+	"math"
+
+	"github.com/mwlazlo/srs/internal/models"
+)
 
 type SMA struct {
 	Period  int
@@ -8,7 +12,7 @@ type SMA struct {
 	History []float64
 }
 
-func (s *SMA) AddBar(bar *Bar) {
+func (s *SMA) AddBar(bar *models.Bar) {
 	s.Values = append(s.Values, bar.AvgPrice())
 
 	// If the length of values is larger than the period, remove the oldest value.

@@ -94,7 +94,7 @@ func NewScraper() *Scraper {
 		}
 	}()
 
-	scraper.connection.ConnectLoop()
+	scraper.connection.StartConnectionLoop()
 	scraper.FetchMarketSuperGroup()
 	scraper.FetchPopularQuotes()
 

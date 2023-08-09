@@ -45,7 +45,7 @@ type ConnectionProxy struct {
 	originUrl          string
 }
 
-func (c *ConnectionProxy) ConnectLoop() {
+func (c *ConnectionProxy) StartConnectionLoop() {
 	if c.token == "" {
 		panic("token is empty")
 	}

@@ -15,7 +15,7 @@ const (
 )
 
 func (s *SrsEntry) Location() *time.Location {
-	return s.tz
+	return s.Timezone()
 }
 
 func (s *SrsEntry) IsOpen(t time.Time) bool {

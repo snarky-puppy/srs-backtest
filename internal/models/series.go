@@ -1,4 +1,4 @@
-package exchange
+package models
 
 import (
 	"math"
@@ -24,27 +24,6 @@ func (s Series) ToChartData() (rv []opts.KlineData) {
 		})
 	}
 	return rv
-}
-
-func (s Series) SignalContext(signal *Signal) (rv Series) {
-	start := signal.Bar.Timestamp.Add(-(2 * signal.Bar.Duration))
-	var end = start.Add(1 * time.Hour)
-	if len(signal.Trades) > 0 {
-		for _, t := range signal.Trades {
-			if t.ExitTime.After(end) {
-				end = t.ExitTime.Add(30 * time.Minute)
-			}
-		}
-	}
-
-	// find index of start, use binary search
-	startIdx := sort.Search(len(s), func(i int) bool {
-		return s[i].Timestamp.After(start)
-	})
-	endIdx := sort.Search(len(s), func(i int) bool {
-		return s[i].Timestamp.After(end)
-	})
-	return s[startIdx:endIdx]
 }
 
 func (s Series) FilterDay(day time.Time, location *time.Location) Series {
@@ -74,4 +53,28 @@ func (s Series) GetBar(offset int) *Bar {
 		return nil
 	}
 	return s[s.HeadIdx()+offset]
+}
+
+func (s Series) UpdateDuration(duration time.Duration) Series {
+	// each s in the Series is a duration less than `duration`
+	if s[0].Duration > duration {
+		panic("updated duration is less than current duration")
+	}
+	if s[0].Duration == duration {
+		return s
+	}
+	agg := NewBarAggregator(duration)
+	rv := make([]*Bar, 0)
+	for _, bar := range s {
+		b := agg.AddBar(bar)
+		if b != nil {
+			rv = append(rv, b)
+		}
+	}
+	final := agg.LastBar()
+	if final != nil {
+		rv = append(rv, final)
+	}
+
+	return rv
 }

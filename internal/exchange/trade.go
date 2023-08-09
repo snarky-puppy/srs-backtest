@@ -56,7 +56,7 @@ func (t *Trade) updateClosed(exTrade *models.Trade) {
 	}
 }
 
-func (t *Trade) PlotStopLine(data Series) (stopLine []string) {
+func (t *Trade) PlotStopLine(data models.Series) (stopLine []string) {
 	var (
 		stopIdx int
 		curStop string
@@ -78,7 +78,7 @@ func (t *Trade) PlotStopLine(data Series) (stopLine []string) {
 	return
 }
 
-func (t *Trade) CheckLoser(bar *Bar) {
+func (t *Trade) CheckLoser(bar *models.Bar) {
 	/*
 		1. ClosePrice losing trades early: if the trade is in loss for too long, 3-5 bars in, close the trade
 			 (dubbed "sunken" - bar's high is still a loss)

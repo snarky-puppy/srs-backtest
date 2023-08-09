@@ -3,20 +3,26 @@ package td365
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"net/url"
 	"regexp"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/mwlazlo/srs/internal"
 	"github.com/mwlazlo/srs/internal/models"
 )
 
 type Platform struct {
-	client     *http.Client
-	account    Account
-	uat        *UserAgentTransport
-	connection *ConnectionProxy
+	client       *http.Client
+	account      Account
+	uat          *UserAgentTransport
+	connection   *ConnectionProxy
+	tradeManager TradeManager
 }
 
 func (p *Platform) GetPopularMarkets() MarketGroup {
@@ -35,9 +41,7 @@ func (p *Platform) GetPopularQuotes() []MarketQuote {
 	if err != nil {
 		panic(err)
 	}
-	defer func() {
-		_ = resp.Body.Close()
-	}()
+	defer internal.Close(resp.Body)
 	if resp.StatusCode != 200 {
 		log.Printf("status code error: %d %s", resp.StatusCode, resp.Status)
 		panic("status code error")
@@ -77,7 +81,7 @@ func (p *Platform) GetBalance() float64 {
 	panic("implement me")
 }
 
-func (p *Platform) Subscribe(q MarketQuote) {
+func (p *Platform) Subscribe(q models.Symbol) {
 	subs := []Subscription{
 		{
 			QuoteID:       q.QuoteID,
@@ -127,12 +131,101 @@ func (p *Platform) updateSessionToken() {
 	p.connection.UpdateToken(token)
 }
 
-func newPlatform(client *http.Client, uat *UserAgentTransport, account Account) *Platform {
+func (p *Platform) BackFill(market models.MarketConfig) {
+	req := struct {
+		MarketID         int  `json:"marketID"`
+		GetAdvancedChart bool `json:"getAdvancedChart"`
+	}{
+		MarketID:         market.Symbol().MarketID,
+		GetAdvancedChart: false,
+	}
+
+	res, err := p.Post(p.account.TradeUrl("/UTSAPI.asmx/GetChartURL"), req)
+	if err != nil {
+		panic(err)
+	}
+	defer internal.Close(res.Body)
+
+	// calculate how many ticks to fetch based on current time
+	now := time.Now().In(market.Location())
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, market.Location())
+	// how many 1 minute intervals between now and start of day
+	maxTicks := int(now.Sub(startOfDay).Minutes()) + 1
+
+	res, err = p.client.Get(fmt.Sprintf("https://charts.finsa.com.au/data/minute/%d/mid?l=%d", market.Symbol().MarketID, maxTicks))
+	if err != nil {
+		panic(err)
+	}
+	defer internal.Close(res.Body)
+
+	var data struct {
+		Data []string `json:"data"`
+	}
+	err = json.NewDecoder(res.Body).Decode(&data)
+	if err != nil {
+		panic(err)
+	}
+
+	var bars models.Series
+	for _, s := range data.Data {
+		bits := strings.Split(s, ",")
+		if len(bits) != 5 {
+			panic("bad data")
+		}
+		t, err := time.Parse(time.RFC3339, bits[0])
+		if err != nil {
+			panic(err)
+		}
+
+		pf := func(s string) float64 {
+			rv, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				panic(err)
+			}
+			return internal.Round4(rv)
+		}
+
+		o := pf(bits[1])
+		h := pf(bits[2])
+		l := pf(bits[3])
+		c := pf(bits[4])
+		bars = append(bars, &models.Bar{
+			Timestamp: t,
+			Open:      o,
+			High:      h,
+			Low:       l,
+			Close:     c,
+			Duration:  time.Minute,
+		})
+	}
+
+	sort.Slice(bars, func(i, j int) bool {
+		return bars[i].Timestamp.Before(bars[j].Timestamp)
+	})
+
+	log.Println("backfill", len(bars), "bars")
+	log.Println("backfill", bars[0].Timestamp, "to", bars[len(bars)-1].Timestamp)
+
+	bars = bars.UpdateDuration(5 * time.Minute)
+
+	p.tradeManager.Backfill(market.Symbol(), bars)
+}
+
+func (p *Platform) Post(url string, req interface{}) (*http.Response, error) {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, err
+	}
+	return p.client.Post(url, "application/json; charset=utf-8", bytes.NewReader(body))
+}
+
+func newPlatform(client *http.Client, uat *UserAgentTransport, account Account, manager TradeManager) *Platform {
 	rv := &Platform{
-		client:     client,
-		account:    account,
-		uat:        uat,
-		connection: NewConnectionProxy(uat.CurrentUrl, account),
+		client:       client,
+		account:      account,
+		uat:          uat,
+		connection:   NewConnectionProxy(uat.CurrentUrl, account),
+		tradeManager: manager,
 	}
 
 	rv.updateSessionToken()
@@ -143,7 +236,7 @@ func newPlatform(client *http.Client, uat *UserAgentTransport, account Account) 
 		}
 	}()
 
-	go rv.connection.ConnectLoop()
+	rv.connection.StartConnectionLoop()
 
 	return rv
 }

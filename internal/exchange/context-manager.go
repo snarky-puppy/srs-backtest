@@ -11,8 +11,12 @@ type EntryScanner interface {
 }
 
 type ContextManager struct {
-	contexts map[string]*MarketContext // k=Symbol.Key()
+	contexts map[int]*MarketContext // k=Symbol.Key()
 	exchange *td365.Platform
+}
+
+func (m *ContextManager) Backfill(symbol models.Symbol, bars models.Series) {
+	m.contexts[symbol.Key()].Backfill(bars)
 }
 
 func (m *ContextManager) HandleTick(tick *models.Tick) {
@@ -27,8 +31,8 @@ func (m *ContextManager) PositionClosed(trade *models.Trade) {
 	m.contexts[trade.Symbol.Key()].PositionClosed(trade)
 }
 
-func (m *ContextManager) AddContext(scanner EntryScanner) {
-	m.contexts[scanner.Symbol().Key()] = NewMarketContext(scanner)
+func (m *ContextManager) AddContext(marketConfig models.MarketConfig, scanner ...EntryScanner) {
+	m.contexts[marketConfig.Symbol().Key()] = NewMarketContext(marketConfig, scanner...)
 }
 
 func (m *ContextManager) SetExchange(platform *td365.Platform) {
@@ -39,17 +43,26 @@ func (m *ContextManager) SetExchange(platform *td365.Platform) {
 }
 
 func (m *ContextManager) SubscribeAll() {
+}
+
+func (m *ContextManager) Initialise() {
 	for _, context := range m.contexts {
-		m.exchange.(context.Symbol())
+		m.exchange.BackFill(context.marketConfig)
+		m.exchange.Subscribe(context.marketConfig.Symbol())
 	}
 }
 
-func NewContextManager(scanners ...EntryScanner) *ContextManager {
+type ContextManagerInput struct {
+	Scanners []EntryScanner
+	Config   models.MarketConfig
+}
+
+func NewContextManager(input ...ContextManagerInput) *ContextManager {
 	cm := &ContextManager{
-		contexts: make(map[string]*MarketContext),
+		contexts: make(map[int]*MarketContext),
 	}
-	for _, scanner := range scanners {
-		cm.AddContext(scanner)
+	for _, i := range input {
+		cm.AddContext(i.Config, i.Scanners...)
 	}
 	return cm
 }

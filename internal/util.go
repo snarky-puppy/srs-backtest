@@ -34,3 +34,13 @@ func Round2(value float64) float64 {
 	// round value to 2 decimals
 	return float64(int(value*100)) / 100
 }
+
+type Closer interface {
+	Close() error
+}
+
+func Close(closer Closer) {
+	if closer != nil {
+		_ = closer.Close()
+	}
+}

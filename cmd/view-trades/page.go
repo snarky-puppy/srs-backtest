@@ -7,6 +7,7 @@ import (
 
 	"github.com/mwlazlo/srs/internal"
 	"github.com/mwlazlo/srs/internal/exchange"
+	"github.com/mwlazlo/srs/internal/models"
 )
 
 type PageTrade struct {
@@ -18,7 +19,7 @@ type pageData struct {
 	Title  string
 	Prev   string
 	Next   string
-	Series exchange.Series
+	Series models.Series
 	Signal *exchange.Signal
 	Trades []PageTrade
 	Profit float64

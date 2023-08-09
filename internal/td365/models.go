@@ -9,6 +9,191 @@ import (
 	"time"
 )
 
+/*
+accountDetails:
+{
+  "t": "accountDetails",
+  "d": {
+    "ClientId": 100194764,
+    "TradingAccountType": "Spread",
+    "OpeningOrders": {
+      "Status": 0,
+      "TotalRecords": 0,
+      "Records": [ ]
+    },
+    "Currencies": {
+      "Status": 0,
+      "TotalRecords": 1,
+      "Records": [
+        {
+          "CurrencyCode": "DMD",
+          "Currency": "DMD",
+          "CurrencySymbol": "DMD",
+          "AccountBalance": 213.94,
+          "CreditAllocation": 10000.0,
+          "OpenPL": -0.6,
+          "AccountValuation": 10213.34,
+          "InitialMargin": 79.9,
+          "TradingResources": 10133.44,
+          "Percentage": "250% +",
+          "MarginPercentage": "12783.21%",
+          "VariationMarginRequired": 10113.47,
+          "WaivedInitialMarginLimit": 0.0,
+          "pt": 0,
+          "Status": 0,
+          "IsTotal": false
+        }
+      ]
+    },
+    "Positions": {
+      "Status": 0,
+      "TotalRecords": 1,
+      "Records": [
+        {
+          "PositionID": 23099554,
+          "MarketID": 17068,
+          "QuoteID": 6374,
+          "CurrencySymbol": "DMD",
+          "Type": "1",
+          "MarketName": "Germany 40 - Rolling Cash",
+          "Direction": "Sell",
+          "ExpiryDateTime": "30/12/31",
+          "CreationTime": "08/08/23 01:10:18",
+          "CreationTimeUTC": "2023-08-08T00:10:18.6903102Z",
+          "Stake": 1,
+          "OpeningPrice": "15981.7",
+          "OpeningPriceDecimal": 15981.7,
+          "CurrentPrice": "15982.3",
+          "CurrentPriceDecimal": 15982.3,
+          "OpenPL": -0.6,
+          "StopOrderPrice": "-",
+          "LimitOrderPrice": "-",
+          "IMR": 79.9,
+          "PrcGenDecimalPlaces": 1,
+          "BetPer": 1.0,
+          "Tradable": true,
+          "IsRollingMarket": true,
+          "IsTriggered": false,
+          "CurrencyCode": "DMD",
+          "IsTotal": false
+        }
+      ]
+    },
+    "Alerts": {
+      "TotalRecords": 0,
+      "records": [ ]
+    },
+    "ClientLanguageId": 1,
+    "CalculatedUTCTicks": 638270517454626006
+  },
+  "cid": "87c835bd-c821-425c-971b-0915460277ff"
+}
+
+accountDetails with a buy order
+
+*/
+
+type AccountSummaryPayload struct {
+	AccountID               string  `json:"AccountID"`
+	PlatformID              int     `json:"PlatformID"`
+	AccountValuation        float64 `json:"AccountValuation"`
+	FundedPercentageString  string  `json:"FundedPercentageString"`
+	ClientId                int     `json:"ClientId"`
+	TradingAccountType      string  `json:"TradingAccountType"`
+	Margin                  float64 `json:"Margin"`
+	OpenPnLQuote            float64 `json:"OpenPnLQuote"`
+	AccountBalance          float64 `json:"AccountBalance"`
+	Credit                  float64 `json:"Credit"`
+	WaivedMargin            float64 `json:"WaivedMargin"`
+	Resources               float64 `json:"Resources"`
+	ChangeIMR               float64 `json:"ChangeIMR"`
+	VariationMarginRequired float64 `json:"VariationMarginRequired"`
+	MarginPercent           float64 `json:"MarginPercent"`
+}
+
+type OpeningOrderRecord struct {
+	Currency           string    `json:"Currency"`
+	CurrentPrice       float64   `json:"CurrentPrice"`
+	Direction          string    `json:"Direction"`
+	ExpiryDate         string    `json:"ExpiryDate"`
+	GoodTill           string    `json:"GoodTill"`
+	IDOLimitOrderPrice string    `json:"IDOLimitOrderPrice"`
+	IDOStopOrderPrice  string    `json:"IDOStopOrderPrice"`
+	IDOGuaranteed      bool      `json:"IDOGuaranteed"`
+	IsTriggered        bool      `json:"IsTriggered"`
+	LimitOrderPrice    string    `json:"LimitOrderPrice"`
+	Margin             float64   `json:"Margin"`
+	Market             string    `json:"Market"`
+	MarketID           int       `json:"MarketID"`
+	MarketTradable     bool      `json:"MarketTradable"`
+	OrderID            int       `json:"OrderID"`
+	Period             string    `json:"Period"`
+	CreationTimeUTC    time.Time `json:"CreationTimeUTC"`
+	QuoteId            int       `json:"QuoteId"`
+	QuoteMode          string    `json:"QuoteMode"`
+	Stake              int       `json:"Stake"`
+	Status             int       `json:"Status"`
+	StopOrderPrice     string    `json:"StopOrderPrice"`
+	Type               string    `json:"Type"`
+	TrailingPoint      int       `json:"TrailingPoint"`
+	IsGuarantee        bool      `json:"IsGuarantee"`
+	IsForceOpen        bool      `json:"IsForceOpen"`
+	OrderPriceModeEnum string    `json:"OrderPriceModeEnum"`
+	CurrencySymbol     string    `json:"CurrencySymbol"`
+	CurrencyCode       string    `json:"CurrencyCode"`
+}
+
+type PositionRecord struct {
+	PositionID          int       `json:"PositionID"`
+	MarketID            int       `json:"MarketID"`
+	QuoteID             int       `json:"QuoteID"`
+	CurrencySymbol      string    `json:"CurrencySymbol"`
+	Type                string    `json:"Type"`
+	MarketName          string    `json:"MarketName"`
+	Direction           string    `json:"Direction"`
+	ExpiryDateTime      string    `json:"ExpiryDateTime"`
+	CreationTime        string    `json:"CreationTime"`
+	CreationTimeUTC     time.Time `json:"CreationTimeUTC"`
+	Stake               int       `json:"Stake"`
+	OpeningPrice        string    `json:"OpeningPrice"`
+	OpeningPriceDecimal float64   `json:"OpeningPriceDecimal"`
+	CurrentPrice        string    `json:"CurrentPrice"`
+	CurrentPriceDecimal float64   `json:"CurrentPriceDecimal"`
+	OpenPL              float64   `json:"OpenPL"`
+	StopOrderPrice      string    `json:"StopOrderPrice"`
+	LimitOrderPrice     string    `json:"LimitOrderPrice"`
+	IMR                 float64   `json:"IMR"`
+	PrcGenDecimalPlaces int       `json:"PrcGenDecimalPlaces"`
+	BetPer              float64   `json:"BetPer"`
+	Tradable            bool      `json:"Tradable"`
+	IsRollingMarket     bool      `json:"IsRollingMarket"`
+	IsTriggered         bool      `json:"IsTriggered"`
+	CurrencyCode        string    `json:"CurrencyCode"`
+	IsTotal             bool      `json:"IsTotal"`
+}
+
+type CurrencyRecord struct {
+	CurrencyCode             string  `json:"CurrencyCode"`
+	Currency                 string  `json:"Currency"`
+	CurrencySymbol           string  `json:"CurrencySymbol"`
+	AccountBalance           float64 `json:"AccountBalance"`
+	CreditAllocation         float64 `json:"CreditAllocation"`
+	OpenPL                   float64 `json:"OpenPL"`
+	AccountValuation         float64 `json:"AccountValuation"`
+	InitialMargin            float64 `json:"InitialMargin"`
+	TradingResources         float64 `json:"TradingResources"`
+	Percentage               string  `json:"Percentage"`
+	MarginPercentage         string  `json:"MarginPercentage"`
+	VariationMarginRequired  float64 `json:"VariationMarginRequired"`
+	WaivedInitialMarginLimit float64 `json:"WaivedInitialMarginLimit"`
+	Pt                       int     `json:"pt"`
+	Status                   int     `json:"Status"`
+	IsTotal                  bool    `json:"IsTotal"`
+}
+
+type AlertRecord struct {
+}
+
 // {"quoteId":6374,"priceGrouping":"Sampled","action":"subscribe"}
 type Subscription struct {
 	QuoteID       int    `json:"QuoteID"`
@@ -38,6 +223,31 @@ type Data struct {
 	Grouped       []string `json:"gp"`
 	Sampled       []string `json:"sp"`
 	Delayed       []string `json:"dp"`
+
+	// AccountSummary
+	ClientId           int    `json:"ClientId"`
+	TradingAccountType string `json:"TradingAccountType"`
+	OpeningOrders      struct {
+		Status       int                  `json:"Status"`
+		TotalRecords int                  `json:"TotalRecords"`
+		Records      []OpeningOrderRecord `json:"Records"`
+	} `json:"OpeningOrders"`
+	Currencies struct {
+		Status       int              `json:"Status"`
+		TotalRecords int              `json:"TotalRecords"`
+		Records      []CurrencyRecord `json:"Records"`
+	} `json:"Currencies"`
+	Positions struct {
+		Status       int              `json:"Status"`
+		TotalRecords int              `json:"TotalRecords"`
+		Records      []PositionRecord `json:"Records"`
+	} `json:"Positions"`
+	Alerts struct {
+		TotalRecords int           `json:"TotalRecords"`
+		Records      []AlertRecord `json:"records"`
+	} `json:"Alerts"`
+	ClientLanguageId   int   `json:"ClientLanguageId"`
+	CalculatedUTCTicks int64 `json:"CalculatedUTCTicks"`
 }
 
 type Response struct {
