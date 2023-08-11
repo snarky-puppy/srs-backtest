@@ -163,6 +163,7 @@
                   data: calculateMA(5, data),
                   smooth: true,
                   showSymbol: false,
+                  animation: false,
                   lineStyle: {
                     width: 1,
                     opacity: 0.5
@@ -174,6 +175,7 @@
                   data: calculateMA(25, data),
                   smooth: true,
                   showSymbol: false,
+                  animation: false,
                   lineStyle: {
                     width: 1,
                     opacity: 0.5
@@ -185,6 +187,7 @@
                   data: calculateMA(50, data),
                   smooth: true,
                   showSymbol: false,
+                  animation: false,
                   lineStyle: {
                     width: 1,
                     opacity: 0.5

@@ -96,7 +96,7 @@ func (s *SrsEntry) On5MinBar(history *exchange.History, marketContext *exchange.
 				return true
 			},
 			TryMaxStop:    true,
-			EnableSmaExit: true,
+			EnableSmaExit: false,
 		}
 		marketContext.AddSignal(s.signal)
 
