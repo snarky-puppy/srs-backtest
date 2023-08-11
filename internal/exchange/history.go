@@ -98,12 +98,12 @@ func (h *History) PrintReport() {
 			intervals[k] = &winloss{}
 		}
 		for _, trade := range signal.Trades {
-			fmt.Println(
-				trade.Direction, "\t",
+			fmt.Printf("%s\t%s\t%0.2f\t%s\t%0.2f\t%0.2f\t%0.2f\n",
+				trade.Direction,
 				trade.EntryTime.Format(ShortDt),
-				trade.EntryPrice, "\t",
-				trade.ExitTime.Format(ShortTime), trade.ExitPrice, "\t",
-				trade.Profit, "\t",
+				trade.EntryPrice,
+				trade.ExitTime.Format(ShortTime), trade.ExitPrice,
+				trade.Profit,
 				trade.Balance)
 
 			if trade.Profit == 0 {
@@ -156,7 +156,7 @@ func (h *History) SaveData(path string, location *time.Location) {
 	index := 0
 	lastDay := ""
 	for _, signal := range h.signals {
-		day := signal.Bar.Timestamp.Local().Format("2006-01-02-15-04-05")
+		day := signal.Bar.Timestamp.Local().Format("20060102-150405")
 		if day != lastDay {
 			index = 0
 			lastDay = day

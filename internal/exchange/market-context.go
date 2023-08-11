@@ -14,7 +14,6 @@ const (
 	ShortDt                     = "02/01 15:04:05"
 	ShortTime                   = "15:04:05"
 	AddToTradeVelocityThreshold = 10
-	AngleRecordBars             = 10
 )
 
 type Platform interface {
@@ -35,6 +34,7 @@ type MarketContext struct {
 	marketConfig       models.MarketConfig
 	history            *History
 	CancelOrdersOnFill bool
+	now                time.Time
 }
 
 func (t *MarketContext) calculateTradeSize(stopPoints float64) float64 {
@@ -81,6 +81,11 @@ func (t *MarketContext) PositionOpened(exTrade *models.Trade) {
 
 func (t *MarketContext) HandleTick(tick *models.Tick) {
 	bar := t.aggregator.AddTick(tick)
+
+	if tick != nil {
+		t.now = tick.Timestamp // simulate time
+	}
+
 	if bar != nil {
 		t.history.AddBar(bar)
 
@@ -122,7 +127,6 @@ func (t *MarketContext) CreateOrder(symbol models.Symbol, signal *Signal, reason
 		}
 		return stop - open
 	}())
-	stopPts = math.Min(stopPts, MaxStopPts)
 	size := t.calculateTradeSize(stopPts)
 	exTrade := t.exchange.CreateOrder(symbol, direction, size, open, stop, target)
 	trade := &Trade{
@@ -201,17 +205,17 @@ func (t *MarketContext) managePosition(tick *models.Tick, trade *Trade) {
 		case models.Long:
 			// trail by 30 pts
 			if (tickPrice - trade.TrailStopPoints) > trade.StopPrice {
-				t.UpdatePosition(tick, trade, tickPrice-trade.TrailStopPoints, 0)
+				t.UpdatePosition(trade, tickPrice-trade.TrailStopPoints, 0)
 			}
 		case models.Short:
 			if (tickPrice + trade.TrailStopPoints) < trade.StopPrice {
-				t.UpdatePosition(tick, trade, tickPrice+trade.TrailStopPoints, 0)
+				t.UpdatePosition(trade, tickPrice+trade.TrailStopPoints, 0)
 			}
 		}
 	}
 }
 
-func (t *MarketContext) UpdatePosition(tick *models.Tick, trade *Trade, stop, target float64) {
+func (t *MarketContext) UpdatePosition(trade *Trade, stop, target float64) {
 	if len(trade.StopLog) > 0 {
 		lastStop := trade.StopLog[len(trade.StopLog)-1]
 		lastBar := t.history.GetBar(0)
@@ -223,9 +227,9 @@ func (t *MarketContext) UpdatePosition(tick *models.Tick, trade *Trade, stop, ta
 
 	trade.StopLog = append(trade.StopLog, &StopLog{
 		Stop:      stop,
-		Timestamp: tick.Timestamp,
+		Timestamp: t.Now(),
 	})
-	t.exchange.UpdatePosition(trade.Id, stop, 0)
+	t.exchange.UpdatePosition(trade.Id, stop, target)
 }
 
 func (t *MarketContext) On5MinBar(tick *models.Tick, bar *models.Bar) {
@@ -243,38 +247,36 @@ func (t *MarketContext) On5MinBar(tick *models.Tick, bar *models.Bar) {
 			continue
 		}
 
-		if position.Id == 13 {
-			log.Println("here")
-		}
-
 		// if we are long, and the 25 SMA crosses below the 5 SMA, exit the position
-		if position.Direction == models.Long {
-			if t.history.Sma25.CrossedOver(t.history.Sma5, 2) {
-				if calculatePointsProfit(position.Trade, bar.Close) <= 0 {
-					// if not in profit, tighten the stop and try to close for break even
-					stop := t.history.FindAverageLow(5)
-					position.ExitReason = ExitReasonSmaCrossStop
-					t.exchange.UpdatePosition(position.Id, stop, position.EntryPrice)
-				} else {
-					// otherwise, just close for profit
-					position.ExitReason = ExitReasonSmaCross
-					t.exchange.ExitPosition(position.Id)
+		if position.Signal.EnableSmaExit {
+			if position.Direction == models.Long {
+				if t.history.Sma25.CrossedOver(t.history.Sma5, 2) {
+					if calculatePointsProfit(position.Trade, bar.Close) <= 0 {
+						// if not in profit, tighten the stop and try to close for break even
+						stop := t.history.FindAverageLow(5)
+						position.ExitReason = ExitReasonSmaCrossStop
+						t.UpdatePosition(position, stop, position.EntryPrice)
+					} else {
+						// otherwise, just close for profit
+						position.ExitReason = ExitReasonSmaCross
+						t.exchange.ExitPosition(position.Id)
+					}
+					continue
 				}
-				continue
-			}
-		} else {
-			if t.history.Sma5.CrossedOver(t.history.Sma25, 2) {
-				if calculatePointsProfit(position.Trade, bar.Close) <= 0 {
-					// if not in profit, tighten the stop and try to close for break even
-					stop := t.history.FindAverageHigh(5)
-					position.ExitReason = ExitReasonSmaCrossStop
-					t.exchange.UpdatePosition(position.Id, stop, position.EntryPrice)
-				} else {
-					// otherwise, just close for profit
-					position.ExitReason = ExitReasonSmaCross
-					t.exchange.ExitPosition(position.Id)
+			} else {
+				if t.history.Sma5.CrossedOver(t.history.Sma25, 2) {
+					if calculatePointsProfit(position.Trade, bar.Close) <= 0 {
+						// if not in profit, tighten the stop and try to close for break even
+						stop := t.history.FindAverageHigh(5)
+						position.ExitReason = ExitReasonSmaCrossStop
+						t.UpdatePosition(position, stop, position.EntryPrice)
+					} else {
+						// otherwise, just close for profit
+						position.ExitReason = ExitReasonSmaCross
+						t.exchange.ExitPosition(position.Id)
+					}
+					continue
 				}
-				continue
 			}
 		}
 
@@ -288,6 +290,11 @@ func (t *MarketContext) Backfill(bars models.Series) {
 	for _, bar := range bars {
 		t.history.AddBar(bar)
 	}
+}
+
+func (t *MarketContext) Now() time.Time {
+	// TODO: if !prod { ...
+	return t.now
 }
 
 func NewMarketContext(config models.MarketConfig, scanner ...EntryScanner) *MarketContext {

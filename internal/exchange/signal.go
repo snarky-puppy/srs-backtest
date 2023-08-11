@@ -16,9 +16,11 @@ const (
 type Signals []*Signal
 
 type Signal struct {
-	Bar        *models.Bar
-	Trades     []*Trade
-	CanTradeFn func(*Signal, models.Direction) bool `json:"-"`
+	Bar           *models.Bar
+	Trades        []*Trade
+	CanTradeFn    func(*Signal, models.Direction) bool `json:"-"`
+	TryMaxStop    bool
+	EnableSmaExit bool
 }
 
 // High returns higher signal breakout with increasing number of trades
@@ -64,11 +66,36 @@ func (s *Signal) EST(direction models.Direction) (entry, stop, target float64) {
 	case models.Long:
 		entry = s.High()
 		target = entry + TargetPoints
-		stop = math.Max(s.Bar.Low, entry-MaxStopPts)
+
+		if s.TryMaxStop {
+			stop = math.Max(s.Bar.Low, entry-MaxStopPts)
+		} else {
+			stopPts := s.Bar.High - s.Bar.Low
+			if stopPts > MaxStopPts {
+				stop = s.Bar.High - MaxStopPts
+			} else if stop < MinStopPts {
+				stop = s.Bar.High - MinStopPts
+			} else {
+				stop = s.Bar.Low
+			}
+		}
 	case models.Short:
 		entry = s.Low()
 		target = entry - TargetPoints
-		stop = math.Min(s.Bar.High, entry+MaxStopPts)
+
+		if s.TryMaxStop {
+			stop = math.Min(s.Bar.High, entry+MaxStopPts)
+			break
+		} else {
+			stopPts := s.Bar.High - s.Bar.Low
+			if stopPts > MaxStopPts {
+				stop = s.Bar.Low + MaxStopPts
+			} else if stop < MinStopPts {
+				stop = s.Bar.Low + MinStopPts
+			} else {
+				stop = s.Bar.High
+			}
+		}
 	}
 	return
 }

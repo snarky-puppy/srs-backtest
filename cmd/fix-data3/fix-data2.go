@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const LatestDirBase = "./data/run3"
+
 type Row struct {
 	Timestamp time.Time
 	Bid       string
@@ -20,7 +22,7 @@ type Row struct {
 }
 
 func main() {
-	fileGroups, err := groupFilesBySymbol("./data/td2/peak-profits")
+	fileGroups, err := groupFilesBySymbol(path.Join(LatestDirBase, "peak-profits"))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -36,7 +38,7 @@ func main() {
 
 func process(sym string, files []os.DirEntry) error {
 
-	outfp, err := os.Create(fmt.Sprintf("data/td2/%s.csv", sym))
+	outfp, err := os.Create(path.Join(LatestDirBase, fmt.Sprintf("%s.csv", sym)))
 	if err != nil {
 		panic(err)
 	}
@@ -57,7 +59,7 @@ func process(sym string, files []os.DirEntry) error {
 	var data []Row
 
 	for _, f := range files {
-		fp, err := os.Open(path.Join("data/td2/peak-profits", f.Name()))
+		fp, err := os.Open(path.Join(LatestDirBase, "peak-profits", f.Name()))
 		if err != nil {
 			panic(err)
 		}

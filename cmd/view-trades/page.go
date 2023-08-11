@@ -25,8 +25,8 @@ type pageData struct {
 	Profit float64
 }
 
-// Render page.tpl
-func Render(w http.ResponseWriter, pos position, report exchange.HistoricalRecord) {
+// RenderPage page.tpl
+func RenderPage(w http.ResponseWriter, pos position, report exchange.HistoricalRecord) {
 	report.Localise()
 	var data = pageData{
 		Title:  report.Signal.Bar.Timestamp.Format(time.DateTime),

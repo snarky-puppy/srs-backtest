@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Awesome go-echarts</title>
+    <title>Peak Profits</title>
     <script src="/static/echarts.min.js"></script>
     <script src="/static/themes/westeros.js"></script>
     <style> .box { justify-content:center; display:flex; flex-wrap:wrap } </style>
@@ -10,7 +10,12 @@
 
 <body>
     <div>
-        <a href='/'>home</a>&nbsp;&nbsp;<a href='/?d={{ .Prev }}'>prev</a> <a href='/?d={{ .Next }}'>next</a>
+        <ul>
+            <li><a href='/'>home</a></li>
+            <li><a href="/daily">daily</a> </li>
+            <li><a href='/?d={{ .Prev }}'>prev</a></li>
+            <li><a href='/?d={{ .Next }}'>next</a></li>
+        </ul>
     </div>
     <div class="box">
         <div class="container">
@@ -77,11 +82,10 @@
     		}
     		return result;
     	}
-    	function fix(timeStr) {
+        const fix = (timeStr) => {
           const [hour, minutes] = timeStr.split(":").map(Number);
           const roundedMinutes = Math.floor(minutes / 5) * 5;
-          const roundedTime = `${hour.toString().padStart(2, "0")}:${roundedMinutes.toString().padStart(2, "0")}`;
-          return roundedTime;
+          return `${hour.toString().padStart(2, "0")}:${roundedMinutes.toString().padStart(2, "0")}`;
         }
         var chart = echarts.init(document.getElementById('chart'), 'westeros');
         var option = {
@@ -209,8 +213,8 @@
             animation: true,
             dataZoom: [{
                 type: "inside",
-                start: 35,
-                end: 85
+                startValue: "08:30",
+                endValue: "18:00"
             }, {
                 type: "slider",
                 end: 100

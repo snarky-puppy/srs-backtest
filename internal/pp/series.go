@@ -51,44 +51,6 @@ func (s Series) Resample(d time.Duration) Series {
 	return resampledBars
 }
 
-func (s Series) FifteenMinute() Series {
-	fifteenMinBars := Series{}
-	var open, high, low, cls float64
-	var fifteenMinStart time.Time
-
-	for i, bar := range s {
-		if i == 0 {
-			// Initialize for the first bar
-			open, high, low, cls = bar.Open, bar.High, bar.Low, bar.Close
-			fifteenMinStart = bar.Timestamp.Truncate(15 * time.Minute)
-			continue
-		}
-
-		if bar.Timestamp.Truncate(15*time.Minute) != fifteenMinStart {
-			// Start of a new 15-minute period, append the accumulated bar to fifteenMinBars
-			fifteenMinBars = append(fifteenMinBars, &Bar{Timestamp: fifteenMinStart, Open: open, High: high, Low: low, Close: cls})
-
-			// Reset for the new 15-minute period
-			open, high, low, cls = bar.Open, bar.High, bar.Low, bar.Close
-			fifteenMinStart = bar.Timestamp.Truncate(15 * time.Minute)
-		} else {
-			// Still the same 15-minute period, update high and low
-			if bar.High > high {
-				high = bar.High
-			}
-			if bar.Low < low {
-				low = bar.Low
-			}
-			cls = bar.Close
-		}
-	}
-
-	// Don't forget the last 15-minute period
-	fifteenMinBars = append(fifteenMinBars, &Bar{Timestamp: fifteenMinStart, Open: open, High: high, Low: low, Close: cls})
-
-	return fifteenMinBars
-}
-
 func (s Series) ToChartXAxis() (rv []time.Time) {
 	for _, bar := range s {
 		rv = append(rv, bar.Timestamp)

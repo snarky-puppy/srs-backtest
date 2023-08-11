@@ -7,7 +7,7 @@ import (
 
 func main() {
 	srs := strategy.SrsEntry{}
-	tradeManager := exchange.NewTradeManager(&srs)
+	tradeManager := exchange.NewMarketContext(&srs, &srs)
 	sim := exchange.NewExchangeSimulator(srs.SimData(), tradeManager)
 	tradeManager.SetExchange(sim)
 

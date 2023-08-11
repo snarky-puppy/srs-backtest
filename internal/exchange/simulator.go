@@ -176,11 +176,8 @@ func (s *Simulator) CloseAllOrders() {
 }
 */
 
-func NewExchangeSimulator(file string, handler *MarketContext) *Simulator {
-	reader, err := NewTickReader(file)
-	if err != nil {
-		panic(err)
-	}
+func NewExchangeSimulator(symbol string, handler *MarketContext) *Simulator {
+	reader := NewTickReader(symbol)
 	rv := &Simulator{
 		reader:       reader,
 		tradeManager: handler,

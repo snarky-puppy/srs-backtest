@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	DATA     = "data/td/Germany 40 - Rolling Cash.csv.gz"
+	DATA     = "Germany 40 - Rolling Cash"
 	MarketID = 17068
 	QuoteID  = 6374
 )
@@ -66,19 +66,20 @@ func (s *SrsEntry) On5MinBar(history *exchange.History, marketContext *exchange.
 	if s.isPeriod(t) {
 
 		// take last 3 elements from s.bars
-		last3Bars := history.GetBars(3)
-		if len(last3Bars) != 3 {
-			panic("expected 3 bars")
+		const historySize = 3
+		setupBars := history.GetBars(historySize)
+		if len(setupBars) != historySize {
+			panic("expected n bars")
 		}
-		if last3Bars[0].Timestamp.Before(s.MarketOpen(t)) {
-			log.Println("skipping signal due to gap in data", last3Bars[0].Timestamp, last3Bars[1].Timestamp, last3Bars[2].Timestamp)
+		if setupBars[0].Timestamp.Before(s.MarketOpen(t)) {
+			log.Println("skipping signal due to gap in data", setupBars[0].Timestamp, setupBars[1].Timestamp, setupBars[2].Timestamp)
 			return
 		}
-		signalBar := last3Bars[0].Copy()
-		for _, b := range last3Bars[1:] {
+		signalBar := setupBars[0].Copy()
+		for _, b := range setupBars[1:] {
 			signalBar.Add(b)
 		}
-		signalBar.Duration = 15 * time.Minute
+		signalBar.Duration = historySize * 5 * time.Minute
 		s.signal = &exchange.Signal{
 			Bar: signalBar,
 			CanTradeFn: func(signal *exchange.Signal, direction models.Direction) bool {
@@ -94,13 +95,12 @@ func (s *SrsEntry) On5MinBar(history *exchange.History, marketContext *exchange.
 				}
 				return true
 			},
+			TryMaxStop:    true,
+			EnableSmaExit: true,
 		}
 		marketContext.AddSignal(s.signal)
 
 		createOrder := func(direction models.Direction) {
-			if bar.Timestamp.Format("2006-01-02") == "2023-06-21" {
-				log.Println("creating order")
-			}
 			entry, stop, _ := s.signal.EST(direction)
 			marketContext.CreateOrder(
 				s.Symbol(),
