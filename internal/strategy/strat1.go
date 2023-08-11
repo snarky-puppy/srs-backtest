@@ -56,7 +56,7 @@ func (s *SrsEntry) isPeriod(t time.Time) bool {
 func (s *SrsEntry) On5MinBar(history *exchange.History, marketContext *exchange.MarketContext) {
 	bar := history.GetBar(0)
 
-	if bar == nil {
+	if bar == nil || bar.Timestamp.Weekday() == time.Tuesday {
 		return
 	}
 
