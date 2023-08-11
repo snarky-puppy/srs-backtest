@@ -134,8 +134,8 @@ func (h *History) PrintReport() {
 	fmt.Printf("percentage losses: %0.2f\n", all.lossPercentage())
 	fmt.Printf("percentage even: %0.2f\n", all.evenPercentage())
 	fmt.Printf("no trade signals: %d\n", noTrades)
-	fmt.Printf("biggest profit: %0.2f\thttp://localhost:8081/?d=%s\n", biggestProfit.Profit, biggestProfit.Signal.Bar.Timestamp.Format("2006-01-02-15-04-05-0.json"))
-	fmt.Printf("biggest loss: %0.2f\thttp://localhost:8081/?d=%s\n", biggestLoss.Profit, biggestLoss.Signal.Bar.Timestamp.Format("2006-01-02-15-04-05-0.json"))
+	fmt.Printf("biggest profit: %0.2f\thttp://localhost:8081/?d=%s\n", biggestProfit.Profit, biggestProfit.Signal.Bar.Timestamp.Format("20060102-150405-0.json"))
+	fmt.Printf("biggest loss: %0.2f\thttp://localhost:8081/?d=%s\n", biggestLoss.Profit, biggestLoss.Signal.Bar.Timestamp.Format("20060102-150405-0.json"))
 
 	// order intervals by day of week
 	var keys = []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}

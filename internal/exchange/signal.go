@@ -64,7 +64,7 @@ func (s *Signal) EncodeableClone() *Signal {
 func (s *Signal) EST(direction models.Direction) (entry, stop, target float64) {
 	switch direction {
 	case models.Long:
-		entry = s.High()
+		entry = s.High() + 3
 		target = entry + TargetPoints
 
 		if s.TryMaxStop {
@@ -80,7 +80,7 @@ func (s *Signal) EST(direction models.Direction) (entry, stop, target float64) {
 			}
 		}
 	case models.Short:
-		entry = s.Low()
+		entry = s.Low() - 3
 		target = entry - TargetPoints
 
 		if s.TryMaxStop {

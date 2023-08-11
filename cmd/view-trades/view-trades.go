@@ -29,7 +29,7 @@ func (r *ReportReader) Report(cursor string) position {
 	}
 	if idx == 0 {
 		return position{
-			prev: "",
+			prev: r.files[len(r.files)-1],
 			cur:  r.files[0],
 			next: r.files[1],
 		}
