@@ -56,12 +56,12 @@ func (p *Platform) GetPopularQuotes() []MarketQuote {
 	return quotes.D
 }
 
-func (p *Platform) CreateOrder(symbol models.Symbol, direction models.Direction, size, open, stop, target float64) *models.Trade {
+func (p *Platform) CreateOrder(symbol models.Symbol, direction models.Direction, size, open, stop, target float64) *models.Position {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p *Platform) ExitPosition(id int) *models.Trade {
+func (p *Platform) ExitPosition(id int) *models.Position {
 	//TODO implement me
 	panic("implement me")
 }
@@ -131,12 +131,12 @@ func (p *Platform) updateSessionToken() {
 	p.connection.UpdateToken(token)
 }
 
-func (p *Platform) BackFill(market models.MarketConfig) {
+func (p *Platform) RequestBackFill(marketID int, loc *time.Location) {
 	req := struct {
 		MarketID         int  `json:"marketID"`
 		GetAdvancedChart bool `json:"getAdvancedChart"`
 	}{
-		MarketID:         market.Symbol().MarketID,
+		MarketID:         marketID,
 		GetAdvancedChart: false,
 	}
 
@@ -147,12 +147,12 @@ func (p *Platform) BackFill(market models.MarketConfig) {
 	defer internal.Close(res.Body)
 
 	// calculate how many ticks to fetch based on current time
-	now := time.Now().In(market.Location())
-	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, market.Location())
+	now := time.Now().In(loc)
+	startOfDay := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
 	// how many 1 minute intervals between now and start of day
 	maxTicks := int(now.Sub(startOfDay).Minutes()) + 1
 
-	res, err = p.client.Get(fmt.Sprintf("https://charts.finsa.com.au/data/minute/%d/mid?l=%d", market.Symbol().MarketID, maxTicks))
+	res, err = p.client.Get(fmt.Sprintf("https://charts.finsa.com.au/data/minute/%d/mid?l=%d", marketID, maxTicks))
 	if err != nil {
 		panic(err)
 	}
@@ -208,7 +208,7 @@ func (p *Platform) BackFill(market models.MarketConfig) {
 
 	bars = bars.UpdateDuration(5 * time.Minute)
 
-	p.tradeManager.Backfill(market.Symbol(), bars)
+	p.tradeManager.Backfill(marketID, bars)
 }
 
 func (p *Platform) Post(url string, req interface{}) (*http.Response, error) {

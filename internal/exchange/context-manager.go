@@ -2,43 +2,33 @@ package exchange
 
 import (
 	"github.com/mwlazlo/srs/internal/models"
-	"github.com/mwlazlo/srs/internal/td365"
 )
 
-type EntryScanner interface {
-	On5MinBar(history *History, marketContext *MarketContext)
-	Symbol() models.Symbol
-}
-
 type ContextManager struct {
-	contexts map[int]*MarketContext // k=Symbol.Key()
-	exchange *td365.Platform
+	strategies map[int]models.Strategy // k=Symbol.MarketID
+	exchange   models.Exchange
 }
 
-func (m *ContextManager) Backfill(symbol models.Symbol, bars models.Series) {
-	m.contexts[symbol.Key()].Backfill(bars)
+func (m *ContextManager) Backfill(marketID int, bars models.Series) {
+	m.strategies[marketID].Backfill(bars)
 }
 
-func (m *ContextManager) HandleTick(tick *models.Tick) {
-	m.contexts[tick.Symbol.Key()].HandleTick(tick)
+func (m *ContextManager) HandleTick(symbol models.Symbol, tick *models.Tick) {
+	m.strategies[symbol.MarketID].OnTick(tick)
 }
 
-func (m *ContextManager) PositionOpened(trade *models.Trade) {
-	m.contexts[trade.Symbol.Key()].PositionOpened(trade)
+func (m *ContextManager) PositionOpened(trade *models.Position) {
+	m.strategies[trade.Symbol.MarketID].PositionOpened(trade)
 }
 
-func (m *ContextManager) PositionClosed(trade *models.Trade) {
-	m.contexts[trade.Symbol.Key()].PositionClosed(trade)
+func (m *ContextManager) PositionClosed(trade *models.Position) {
+	m.strategies[trade.Symbol.MarketID].PositionClosed(trade)
 }
 
-func (m *ContextManager) AddContext(marketConfig models.MarketConfig, scanner ...EntryScanner) {
-	m.contexts[marketConfig.Symbol().Key()] = NewMarketContext(marketConfig, scanner...)
-}
-
-func (m *ContextManager) SetExchange(platform *td365.Platform) {
-	m.exchange = platform
-	for _, context := range m.contexts {
-		context.exchange = platform
+func (m *ContextManager) SetExchange(e models.Exchange) {
+	m.exchange = e
+	for _, context := range m.strategies {
+		context.SetExchange(e)
 	}
 }
 
@@ -46,23 +36,37 @@ func (m *ContextManager) SubscribeAll() {
 }
 
 func (m *ContextManager) Initialise() {
-	for _, context := range m.contexts {
-		m.exchange.BackFill(context.marketConfig)
-		m.exchange.Subscribe(context.marketConfig.Symbol())
+	for _, context := range m.strategies {
+		m.exchange.RequestBackFill(context.Symbol().MarketID, context.Location())
+		m.exchange.Subscribe(context.Symbol())
 	}
 }
 
-type ContextManagerInput struct {
-	Scanners []EntryScanner
-	Config   models.MarketConfig
+func (m *ContextManager) GetSymbols() (rv []models.Symbol) {
+	for _, context := range m.strategies {
+		rv = append(rv, context.Symbol())
+	}
+	return
 }
 
-func NewContextManager(input ...ContextManagerInput) *ContextManager {
+func (m *ContextManager) PrintReport() {
+	for _, context := range m.strategies {
+		context.PrintReport()
+	}
+}
+
+func (m *ContextManager) SaveData(dir string) {
+	for _, context := range m.strategies {
+		context.SaveData(dir, context.Location())
+	}
+}
+
+func NewContextManager(strategies ...models.Strategy) *ContextManager {
 	cm := &ContextManager{
-		contexts: make(map[int]*MarketContext),
+		strategies: make(map[int]models.Strategy),
 	}
-	for _, i := range input {
-		cm.AddContext(i.Config, i.Scanners...)
+	for _, s := range strategies {
+		cm.strategies[s.Symbol().MarketID] = s
 	}
 	return cm
 }

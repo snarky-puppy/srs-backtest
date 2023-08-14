@@ -63,6 +63,10 @@ func (b *BarAggregator) LastBar() *Bar {
 	return b.bar
 }
 
+func (b *BarAggregator) GetIncomplete() *Bar {
+	return b.bar
+}
+
 func NewBarAggregator(duration time.Duration) *BarAggregator {
 	rv := &BarAggregator{
 		duration: duration,

@@ -33,9 +33,9 @@ func PortalUrl(path string) string {
 
 type TradeManager interface {
 	HandleTick(tick *models.Tick)
-	PositionOpened(trade *models.Trade)
-	PositionClosed(trade *models.Trade)
-	Backfill(symbol models.Symbol, bars models.Series)
+	PositionOpened(trade *models.Position)
+	PositionClosed(trade *models.Position)
+	Backfill(marketID int, bars models.Series)
 }
 
 type Portal struct {

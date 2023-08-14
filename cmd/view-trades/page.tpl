@@ -5,7 +5,20 @@
     <title>Peak Profits</title>
     <script src="/static/echarts.min.js"></script>
     <script src="/static/themes/westeros.js"></script>
-    <style> .box { justify-content:center; display:flex; flex-wrap:wrap } </style>
+    <style>
+        .box { justify-content:center; display:flex; flex-wrap:wrap }
+        ul {
+            list-style-type: none;
+            margin: 0;
+            padding: 0;
+            padding-bottom: 5px;
+            overflow: hidden;
+        }
+        li {
+            float: left;
+            padding-right: 10px;
+        }
+    </style>
 </head>
 
 <body>
@@ -216,7 +229,7 @@
             animation: true,
             dataZoom: [{
                 type: "inside",
-                startValue: "08:30",
+                startValue: "05:30",
                 endValue: "18:00"
             }, {
                 type: "slider",

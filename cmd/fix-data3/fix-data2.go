@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const LatestDirBase = "./data/run3"
+const LatestDirBase = "./data/latest"
 
 type Row struct {
 	Timestamp time.Time

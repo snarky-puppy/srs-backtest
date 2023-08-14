@@ -3,45 +3,31 @@ package exchange
 import (
 	"errors"
 	"io"
+	"time"
 
 	"github.com/mwlazlo/srs/internal"
 	"github.com/mwlazlo/srs/internal/models"
 	"github.com/mwlazlo/srs/internal/td365"
 )
 
-func closeTrade(t *models.Trade, tick *models.Tick, balance float64) (newBalance float64) {
-	t.Status = models.Closed
-	t.ExitTime = tick.Timestamp
-	t.ExitPrice = tick.MidPrice()
-	t.PointsProfit = calculatePointsProfit(t, t.ExitPrice)
-	t.Profit = calculateRealProfit(t, t.ExitPrice)
-	newBalance = internal.Round2(balance + t.Profit)
-	t.Balance = newBalance
-	return
-}
-
-func calculatePointsProfit(t *models.Trade, close float64) float64 {
-	switch t.Direction {
-	case models.Long:
-		return internal.Round2(close - t.EntryPrice)
-	case models.Short:
-		return internal.Round2(t.EntryPrice - close)
-	}
-	return 0
-}
-
-func calculateRealProfit(t *models.Trade, close float64) float64 {
-	return internal.Round2(t.Size * calculatePointsProfit(t, close))
-}
-
 type Simulator struct {
-	reader       *TickReader // internally generate ticks, like a real exchange
-	positions    map[int]*models.Trade
-	orders       map[int]*models.Trade
-	tradeId      int
-	currentTick  *models.Tick
-	tradeManager *MarketContext
-	balance      float64
+	positions   map[int]*models.Position
+	orders      map[int]*models.Position
+	tradeId     int
+	currentTick *models.Tick
+	ctxMngr     *ContextManager
+	balance     float64
+	readers     map[int]*TickReader
+}
+
+func (s *Simulator) Subscribe(symbol models.Symbol) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *Simulator) RequestBackFill(marketID int, location *time.Location) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (s *Simulator) GetPopularMarkets() td365.MarketGroup {
@@ -58,7 +44,7 @@ func (s *Simulator) UpdatePosition(id int, stop, target float64) {
 	trade.TargetPrice = target
 }
 
-func (s *Simulator) ExitPosition(id int) *models.Trade {
+func (s *Simulator) ExitPosition(id int) *models.Position {
 	trade := s.positions[id]
 	s.closePosition(trade, s.currentTick)
 	return trade
@@ -69,24 +55,26 @@ func (s *Simulator) CancelOrder(id int) {
 }
 
 func (s *Simulator) ProcessTicks() {
-	for {
-		finalLoop := false
-		tick, err := s.reader.Next()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				finalLoop = true
-			} else {
-				panic(err)
+	for _, r := range s.readers {
+		for {
+			finalLoop := false
+			tick, err := r.Next()
+			if err != nil {
+				if errors.Is(err, io.EOF) {
+					finalLoop = true
+				} else {
+					panic(err)
+				}
 			}
-		}
-		if tick != nil {
-			s.addTick(tick)
-		}
-		// let the strategy handle the final tick as nil
-		s.tradeManager.HandleTick(tick)
+			if tick != nil {
+				s.addTick(tick)
+			}
+			// let the strategy handle the final tick as nil
+			s.ctxMngr.HandleTick(r.symbol, tick)
 
-		if finalLoop {
-			return
+			if finalLoop {
+				break
+			}
 		}
 	}
 }
@@ -130,10 +118,11 @@ func (s *Simulator) addTick(tick *models.Tick) {
 	}
 }
 
-func (s *Simulator) CreateOrder(symbol models.Symbol, direction models.Direction, size, open, stop, target float64) *models.Trade {
+func (s *Simulator) CreateOrder(symbol models.Symbol, direction models.Direction, size, open, stop, target float64) *models.Position {
 	s.tradeId++
-	trade := &models.Trade{
+	trade := &models.Position{
 		Id:          s.tradeId,
+		Symbol:      symbol,
 		Size:        size,
 		Status:      models.Order,
 		Direction:   direction,
@@ -146,25 +135,36 @@ func (s *Simulator) CreateOrder(symbol models.Symbol, direction models.Direction
 	return trade
 }
 
-func (s *Simulator) enterPosition(trade *models.Trade, tick *models.Tick) {
+func (s *Simulator) enterPosition(trade *models.Position, tick *models.Tick) {
 	trade.EntryTime = tick.Timestamp
 	trade.EntryPrice = tick.DirectionPrice(trade.Direction)
-	trade.Status = models.Position
+	trade.Status = models.Active
 	delete(s.orders, trade.Id)
 	s.positions[trade.Id] = trade
-	s.tradeManager.PositionOpened(trade)
+	s.ctxMngr.PositionOpened(trade)
 }
 
-func (s *Simulator) closePosition(trade *models.Trade, tick *models.Tick) {
+func (s *Simulator) closePosition(trade *models.Position, tick *models.Tick) {
 	s.balance = closeTrade(trade, tick, s.balance)
 	delete(s.positions, trade.Id)
-	s.tradeManager.PositionClosed(trade)
+	s.ctxMngr.PositionClosed(trade)
+}
+
+func closeTrade(t *models.Position, tick *models.Tick, balance float64) (newBalance float64) {
+	t.Status = models.Closed
+	t.ExitTime = tick.Timestamp
+	t.ExitPrice = tick.MidPrice()
+	t.PointsProfit = models.CalculatePointsProfit(t, t.ExitPrice)
+	t.Profit = models.CalculateRealProfit(t, t.ExitPrice)
+	newBalance = internal.Round2(balance + t.Profit)
+	t.Balance = newBalance
+	return
 }
 
 /*func (s *Simulator) CloseAllPositions(bar *Bar) {
 	for _, trade := range s.positions {
 		trade.Close(tick)
-		s.tradeManager.TradeClosed(trade)
+		s.ctxMngr.TradeClosed(trade)
 		delete(s.positions, trade.Id)
 	}
 }
@@ -176,14 +176,18 @@ func (s *Simulator) CloseAllOrders() {
 }
 */
 
-func NewExchangeSimulator(symbol string, handler *MarketContext) *Simulator {
-	reader := NewTickReader(symbol)
-	rv := &Simulator{
-		reader:       reader,
-		tradeManager: handler,
-		positions:    make(map[int]*models.Trade),
-		orders:       make(map[int]*models.Trade),
-		balance:      3_450,
+func NewExchangeSimulator(handler *ContextManager) *Simulator {
+	readers := make(map[int]*TickReader)
+	for _, symbol := range handler.GetSymbols() {
+		readers[symbol.MarketID] = NewTickReader(symbol)
 	}
+	rv := &Simulator{
+		readers:   readers,
+		ctxMngr:   handler,
+		positions: make(map[int]*models.Position),
+		orders:    make(map[int]*models.Position),
+		balance:   3_450,
+	}
+	handler.SetExchange(rv)
 	return rv
 }

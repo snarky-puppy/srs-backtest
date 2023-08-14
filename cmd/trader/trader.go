@@ -18,16 +18,10 @@ const (
 )
 
 func main() {
-
 	ctx := internal.GetGracefulCtx()
-
-	strat1 := strategy.SrsEntry{}
-	cm := exchange.NewContextManager(exchange.ContextManagerInput{
-		Scanners: []exchange.EntryScanner{&strat1},
-		Config:   &strat1,
-	})
+	dax := strategy.NewDax()
+	cm := exchange.NewContextManager(dax)
 	platform := td365.LaunchPlatform(ctx, DemoAccountId, cm)
 	cm.SetExchange(platform)
 	cm.Initialise()
-
 }

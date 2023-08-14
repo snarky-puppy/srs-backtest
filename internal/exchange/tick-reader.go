@@ -16,22 +16,44 @@ import (
 
 const BaseDir = "data/td"
 
+/*
+Germany 40 - Rolling Cash.csv.gz
+US Tech 100 - Rolling Cash.csv.gz
+Wall Street 30 - Rolling Cash.csv.gz
+*/
+func symbolToFile(symbol models.Symbol) string {
+	switch symbol.MarketID {
+	case 17068:
+		return "Germany 40 - Rolling Cash"
+	case 20190:
+		return "US Tech 100 - Rolling Cash"
+	case 17322:
+		return "Wall Street 30 - Rolling Cash"
+	default:
+		panic(fmt.Sprintf("unknown symbol %v", symbol))
+	}
+}
+
 type TickReader struct {
-	curDir int
-	symbol string
-	file   *os.File
-	reader *csv.Reader
-	gzr    *gzip.Reader
+	curDir   int
+	fileName string
+	file     *os.File
+	reader   *csv.Reader
+	gzr      *gzip.Reader
+	symbol   models.Symbol
 }
 
 // NewTickReader creates a new TickReader with the specified CSV file
-func NewTickReader(symbol string) *TickReader {
-	return &TickReader{symbol: symbol}
+func NewTickReader(symbol models.Symbol) *TickReader {
+	return &TickReader{
+		symbol:   symbol,
+		fileName: symbolToFile(symbol),
+	}
 }
 
 func (t *TickReader) openNext() error {
 	t.curDir++
-	file, err := os.Open(path.Join(BaseDir, strconv.Itoa(t.curDir), fmt.Sprintf("%s.csv.gz", t.symbol)))
+	file, err := os.Open(path.Join(BaseDir, strconv.Itoa(t.curDir), fmt.Sprintf("%s.csv.gz", t.fileName)))
 	if err != nil {
 		fmt.Println("TickReader reached end of series", err)
 		return io.EOF
@@ -46,19 +68,19 @@ func (t *TickReader) openNext() error {
 }
 
 // Next reads the next Tick from the CSV file
-func (tr *TickReader) Next() (*models.Tick, error) {
-	if tr.reader == nil {
-		if err := tr.openNext(); err != nil {
+func (t *TickReader) Next() (*models.Tick, error) {
+	if t.reader == nil {
+		if err := t.openNext(); err != nil {
 			return nil, err
 		}
 	}
-	record, err := tr.reader.Read()
+	record, err := t.reader.Read()
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			if err := tr.openNext(); err != nil {
+			if err := t.openNext(); err != nil {
 				return nil, err
 			}
-			return tr.Next()
+			return t.Next()
 		}
 		return nil, err
 	}
@@ -78,10 +100,10 @@ func (tr *TickReader) Next() (*models.Tick, error) {
 		return nil, err
 	}
 
-	return &models.Tick{Timestamp: timestamp.UTC(), Buy: buy, Sell: sell}, nil
+	return &models.Tick{Symbol: t.symbol, Timestamp: timestamp.UTC(), Buy: buy, Sell: sell}, nil
 }
 
 // Close closes the CSV file
-func (tr *TickReader) Close() error {
-	return tr.file.Close()
+func (t *TickReader) Close() error {
+	return t.file.Close()
 }
