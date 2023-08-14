@@ -6,6 +6,8 @@ import (
 	"math"
 	"os"
 	"time"
+
+	"github.com/mwlazlo/srs/internal"
 )
 
 const (
@@ -75,12 +77,17 @@ func (h *History) AddSignal(signal *Signal) {
 
 func (h *History) PrintReport() {
 	var (
-		noTrades      int
-		biggestProfit *Trade
-		biggestLoss   *Trade
-		intervals     = make(map[string]*winloss)
-		all           = &winloss{}
-		totalProfit   float64
+		noTrades             int
+		biggestProfit        *Trade
+		biggestLoss          *Trade
+		intervals            = make(map[string]*winloss)
+		all                  = &winloss{}
+		totalProfit          float64
+		totalLoss            float64
+		winningStreak        []*Trade
+		longestWinningStreak []*Trade
+		losingStreak         []*Trade
+		longestLosingStreak  []*Trade
 	)
 
 	for _, signal := range h.signals {
@@ -105,11 +112,31 @@ func (h *History) PrintReport() {
 				intervals[k].addEven()
 				all.addEven()
 			} else if trade.Profit > 0 {
+				if len(losingStreak) > len(longestLosingStreak) {
+					longestLosingStreak = losingStreak
+				}
+				losingStreak = nil
+				if winningStreak == nil {
+					winningStreak = []*Trade{trade}
+				} else {
+					winningStreak = append(winningStreak, trade)
+				}
 				intervals[k].addWin()
 				all.addWin()
+				totalProfit += trade.Profit
 			} else {
 				intervals[k].addLoss()
 				all.addLoss()
+				if losingStreak == nil {
+					losingStreak = []*Trade{trade}
+				} else {
+					losingStreak = append(losingStreak, trade)
+				}
+				if len(winningStreak) > len(longestWinningStreak) {
+					longestWinningStreak = winningStreak
+				}
+				winningStreak = nil
+				totalLoss += trade.Profit
 			}
 
 			if biggestLoss == nil || trade.Profit < biggestLoss.Profit {
@@ -118,12 +145,11 @@ func (h *History) PrintReport() {
 			if biggestProfit == nil || trade.Profit > biggestProfit.Profit {
 				biggestProfit = trade
 			}
-
-			totalProfit += trade.Profit
 		}
 	}
+	totalLoss = math.Abs(totalLoss)
 
-	fmt.Printf("target profits: %d, break even: %d, loss: %d\n", all.win, all.even, all.loss)
+	fmt.Printf("trades: win: %d, break even: %d, lose: %d\n", all.win, all.even, all.loss)
 	// as a percentage of wins
 	fmt.Printf("percentage wins: %0.2f\n", all.winPercentage())
 	fmt.Printf("percentage losses: %0.2f\n", all.lossPercentage())
@@ -131,6 +157,7 @@ func (h *History) PrintReport() {
 	fmt.Printf("no trade signals: %d\n", noTrades)
 	fmt.Printf("biggest profit: %0.2f\thttp://localhost:8081/?d=%s\n", biggestProfit.Profit, biggestProfit.Signal.Bar.Timestamp.Format("20060102-150405-0.json"))
 	fmt.Printf("biggest loss: %0.2f\thttp://localhost:8081/?d=%s\n", biggestLoss.Profit, biggestLoss.Signal.Bar.Timestamp.Format("20060102-150405-0.json"))
+	fmt.Println("---")
 
 	// order intervals by day of week
 	var keys = []string{"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
@@ -140,7 +167,27 @@ func (h *History) PrintReport() {
 		}
 	}
 	fmt.Printf("overall win rate: %0.2f (%s)\n", all.winPercentage(), all)
-	fmt.Printf("total profit: %f\n", totalProfit)
+	fmt.Printf("total won: $%0.2f\n", totalProfit)
+	fmt.Printf("total lost: $%0.2f\n", totalLoss)
+	fmt.Printf("profit factor: %0.2f\n", totalProfit/totalLoss)
+	fmt.Printf("total profit: $%0.2f\n", totalProfit-totalLoss)
+	fmt.Println("---")
+
+	winningStreakAmt := 0.0
+	for _, t := range longestWinningStreak {
+		winningStreakAmt += t.Profit
+	}
+	fmt.Println("Winning streak:", len(longestWinningStreak), "trades, total win:", internal.Round2(winningStreakAmt))
+	fmt.Println("Winning streak:", longestWinningStreak[0].EntryTime.Format(ShortDt), longestWinningStreak[len(longestWinningStreak)-1].ExitTime.Format(ShortDt))
+
+	fmt.Println("---")
+
+	losingStreakAmt := 0.0
+	for _, t := range longestLosingStreak {
+		losingStreakAmt += t.Profit
+	}
+	fmt.Println("Losing streak:", len(longestLosingStreak), "trades, total loss:", internal.Round2(losingStreakAmt))
+	fmt.Println("Losing streak:", longestLosingStreak[0].EntryTime.Format(ShortDt), longestLosingStreak[len(longestLosingStreak)-1].ExitTime.Format(ShortDt))
 }
 
 func (h *History) CurrentIndex() int {
