@@ -19,9 +19,9 @@ const (
 
 func main() {
 	ctx := internal.GetGracefulCtx()
-	dax := strategy.NewDax()
-	cm := exchange.NewContextManager(dax)
-	platform := td365.LaunchPlatform(ctx, DemoAccountId, cm)
-	cm.SetExchange(platform)
-	cm.Initialise()
+	mngr := exchange.NewContextManager(strategy.NewTest())
+	platform := td365.LaunchPlatform(ctx, DemoAccountId, mngr)
+	mngr.SetExchange(platform)
+	mngr.Initialise()
+	<-ctx.Done()
 }

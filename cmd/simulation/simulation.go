@@ -6,9 +6,9 @@ import (
 )
 
 func main() {
-	mngr := exchange.NewContextManager(strategy.NewDax())
+	mngr := exchange.NewContextManager(strategy.NewTest())
 	sim := exchange.NewExchangeSimulator(mngr)
 	sim.ProcessTicks()
 	mngr.PrintReport()
-	mngr.SaveData("data/reports")
+	//mngr.SaveData("data/reports")
 }

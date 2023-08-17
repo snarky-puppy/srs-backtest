@@ -6,12 +6,11 @@ import (
 	"time"
 
 	"github.com/mwlazlo/srs/internal"
-	"github.com/mwlazlo/srs/internal/exchange"
 	"github.com/mwlazlo/srs/internal/models"
 )
 
 type PageTrade struct {
-	*exchange.Trade
+	*models.Trade
 	StopLine []string
 }
 
@@ -20,13 +19,13 @@ type pageData struct {
 	Prev   string
 	Next   string
 	Series models.Series
-	Signal *exchange.Signal
+	Signal *models.Signal
 	Trades []PageTrade
 	Profit float64
 }
 
 // RenderPage page.tpl
-func RenderPage(w http.ResponseWriter, pos position, report exchange.HistoricalRecord) {
+func RenderPage(w http.ResponseWriter, pos position, report models.HistoricalRecord) {
 	report.Localise()
 	var data = pageData{
 		Title:  report.Signal.Bar.Timestamp.Format(time.DateTime),

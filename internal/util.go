@@ -2,8 +2,11 @@ package internal
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
+	"runtime/debug"
+	"strconv"
 	"syscall"
 )
 
@@ -43,4 +46,13 @@ func Close(closer Closer) {
 	if closer != nil {
 		_ = closer.Close()
 	}
+}
+
+func MustInt(s string) int {
+	rv, err := strconv.Atoi(s)
+	if err != nil {
+		log.Println("MustInt", err)
+		debug.PrintStack()
+	}
+	return rv
 }

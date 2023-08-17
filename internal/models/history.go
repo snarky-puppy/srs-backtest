@@ -21,7 +21,7 @@ type HistoricalRecord struct {
 	Timezone string
 }
 
-/*func (r *HistoricalRecord) Localise() {
+func (r *HistoricalRecord) Localise() {
 	location, _ := time.LoadLocation(r.Timezone)
 	for _, bar := range r.Context {
 		bar.Timestamp = bar.Timestamp.In(location)
@@ -37,7 +37,7 @@ type HistoricalRecord struct {
 		// round profit 2 decimals
 		trade.Profit = math.Round(trade.Profit*100) / 100
 	}
-}*/
+}
 
 type History struct {
 	signals []*Signal

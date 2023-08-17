@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mwlazlo/srs/internal/exchange"
+	"github.com/mwlazlo/srs/internal/models"
 )
 
 type ReportReader struct {
@@ -48,7 +48,7 @@ func (r *ReportReader) Report(cursor string) position {
 	}
 }
 
-func (r *ReportReader) LoadRecord(cur string) (rv exchange.HistoricalRecord) {
+func (r *ReportReader) LoadRecord(cur string) (rv models.HistoricalRecord) {
 	fp, err := os.Open(fmt.Sprintf("%s/%s", r.baseDir, cur))
 	if err != nil {
 		panic(err)
@@ -62,7 +62,7 @@ func (r *ReportReader) LoadRecord(cur string) (rv exchange.HistoricalRecord) {
 }
 
 // LoadAll loads all the reports in the base directory
-func (r *ReportReader) LoadAll() (rv []exchange.HistoricalRecord) {
+func (r *ReportReader) LoadAll() (rv []models.HistoricalRecord) {
 	for _, f := range r.files {
 		rv = append(rv, r.LoadRecord(f))
 	}

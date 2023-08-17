@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/mwlazlo/srs/internal"
-	"github.com/mwlazlo/srs/internal/exchange"
+	"github.com/mwlazlo/srs/internal/models"
 )
 
 type DayRow struct {
@@ -18,7 +18,7 @@ type dailyData struct {
 	Days []DayRow
 }
 
-func createDayRows(report []exchange.HistoricalRecord) []DayRow {
+func createDayRows(report []models.HistoricalRecord) []DayRow {
 	var rows []DayRow
 	for _, record := range report {
 		var profit float64
@@ -34,7 +34,7 @@ func createDayRows(report []exchange.HistoricalRecord) []DayRow {
 }
 
 // RenderPage daily.tpl
-func RenderDaily(w http.ResponseWriter, report []exchange.HistoricalRecord) {
+func RenderDaily(w http.ResponseWriter, report []models.HistoricalRecord) {
 
 	var data = dailyData{
 		Days: createDayRows(report),

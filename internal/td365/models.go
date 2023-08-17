@@ -509,6 +509,79 @@ type Result struct {
 	  "IDOLimitOrderPrice": "15700.0",
 	  "IDOStopOrderPrice": "15570.0"
 	}
+
+// sell:
+
+	{
+	  "tradeType": 1,
+	  "marketID": "17068",
+	  "marketQuoteID": "6374",
+	  "tradeModeID": true,
+	  "orderStake": "66",
+	  "orderModeID": 2,
+	  "orderTypeID": 2,
+	  "orderPriceModeID": 2,
+	  "limitOrderPrice": 0,
+	  "stopOrderPrice": 15705,
+	  "hasIfDoneOrder": true,
+	  "IDOIsGuarantee": false,
+	  "IDOOrderModeID": 2,
+	  "IDOLimitOrderPrice": 0,
+	  "IDOStopOrderPrice": 15725
+	}
+
+// buy:
+
+	{
+	  "tradeType": 1,
+	  "marketID": 17068,
+	  "marketQuoteID": 6374,
+	  "tradeModeID": false,
+	  "orderStake": "66",
+	  "orderModeID": 2,
+	  "orderTypeID": 2,
+	  "orderPriceModeID": 2,
+	  "limitOrderPrice": 0,
+	  "stopOrderPrice": 15710,
+	  "hasIfDoneOrder": true,
+	  "IDOIsGuarantee": false,
+	  "IDOOrderModeID": 2,
+	  "IDOLimitOrderPrice": 0,
+	  "IDOStopOrderPrice": "15690.0"
+	}
+
+// sell response:
+
+	{
+	  "d": {
+	    "__type": "TradingPlatform.OpenOrder",
+	    "OrderID": "22838126",
+	    "QuoteID": null,
+	    "MarketID": null,
+	    "Market": "Germany 40 - Rolling Cash",
+	    "ExpiryDate": "31/12/30",
+	    "TradeMode": "sell",
+	    "Stake": "66.0",
+	    "OrderMode": "Stop",
+	    "OrderType": "GoodTillCancel",
+	    "OrderPriceMode": "Quote",
+	    "LimitOrderPrice": "0.0",
+	    "StopOrderPrice": "15705.0",
+	    "OrderStatus": null,
+	    "IsForceOpen": false,
+	    "IDOID": "22838126",
+	    "IDOOrderMode": "Stop",
+	    "IDOTradeMode": "buy",
+	    "IDOIsGuaranteedStop": false,
+	    "IDOLimitOrderPrice": "0",
+	    "IDOStopOrderPrice": "15725",
+	    "IDOTrailingPoint": null,
+	    "Currency": "DMD",
+	    "IsRollingMarket": false,
+	    "Status": 0,
+	    "Message": null
+	  }
+	}
 */
 type InsertOpenOrderRequest struct {
 	TradeType          int    `json:"tradeType"`
@@ -519,8 +592,8 @@ type InsertOpenOrderRequest struct {
 	OrderModeID        int    `json:"orderModeID"`
 	OrderTypeID        int    `json:"orderTypeID"`
 	OrderPriceModeID   int    `json:"orderPriceModeID"`
-	LimitOrderPrice    int    `json:"limitOrderPrice"`
-	StopOrderPrice     int    `json:"stopOrderPrice"`
+	LimitOrderPrice    string `json:"limitOrderPrice"`
+	StopOrderPrice     string `json:"stopOrderPrice"`
 	HasIfDoneOrder     bool   `json:"hasIfDoneOrder"`
 	IDOIsGuarantee     bool   `json:"IDOIsGuarantee"`
 	IDOOrderModeID     int    `json:"IDOOrderModeID"`
@@ -925,6 +998,7 @@ type GetOpenPositionDetailsResponse struct {
   "userAgent": "Firefox (115.0)",
   "key": "k//pF64C6cwNcMfo0oHEZ5FDyiQmySiNc5w4ng2Mptc="
 }
+
 */
 type InsertClosePositionRequest struct {
 	MarketID      int    `json:"marketID"`

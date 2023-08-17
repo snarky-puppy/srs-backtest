@@ -7,30 +7,30 @@ import (
 	"github.com/mwlazlo/srs/internal/models"
 )
 
-func (d *Dax) Location() *time.Location {
+func (d *Nasdaq) Location() *time.Location {
 	return d.Timezone()
 }
 
-func (d *Dax) IsOpen(t time.Time) bool {
+func (d *Nasdaq) IsOpen(t time.Time) bool {
 	t = t.In(d.Timezone())
 	return t.After(d.MarketOpen(t)) && t.Before(d.MarketClose(t))
 }
 
-func (d *Dax) MarketOpen(t time.Time) time.Time {
+func (d *Nasdaq) MarketOpen(t time.Time) time.Time {
 	t = t.In(d.Timezone())
 	return time.Date(t.Year(), t.Month(), t.Day(), 9, 0, 0, 0, d.Location())
 }
 
 // MarketClose returns the time the market closes on day t
-func (d *Dax) MarketClose(t time.Time) time.Time {
+func (d *Nasdaq) MarketClose(t time.Time) time.Time {
 	t = t.In(d.Timezone())
 	return time.Date(t.Year(), t.Month(), t.Day(), 17, 25, 0, 0, d.Location())
 }
 
-func (d *Dax) Timezone() *time.Location {
+func (d *Nasdaq) Timezone() *time.Location {
 	if d.tz == nil {
 		var err error
-		d.tz, err = time.LoadLocation("Europe/Berlin")
+		d.tz, err = time.LoadLocation("America/New_York")
 		if err != nil {
 			panic(err)
 		}
@@ -38,7 +38,7 @@ func (d *Dax) Timezone() *time.Location {
 	return d.tz
 }
 
-func (d *Dax) isPeriod(t time.Time) bool {
+func (d *Nasdaq) isPeriod(t time.Time) bool {
 	t = t.In(d.Timezone())
 	if t.Minute() == 25 && t.Hour() == 9 {
 		return true
@@ -46,7 +46,7 @@ func (d *Dax) isPeriod(t time.Time) bool {
 	return false
 }
 
-func (d *Dax) On5MinBar() {
+func (d *Nasdaq) On5MinBar() {
 	bar := d.history.GetBar(0)
 
 	if bar == nil {
@@ -135,26 +135,26 @@ func (d *Dax) On5MinBar() {
 	d.MarketContext.CommonBarHandler(bar)
 }
 
-func (d *Dax) OnTick(tick *models.Tick) {
+func (d *Nasdaq) OnTick(tick *models.Tick) {
 	d.DefaultOnTick(tick)
 }
 
-func (d *Dax) Symbol() models.Symbol {
+func (d *Nasdaq) Symbol() models.Symbol {
 	return models.Symbol{
 		MarketID: 17068,
 		QuoteID:  6374,
 	}
 }
 
-type Dax struct {
+type Nasdaq struct {
 	*MarketContext
 	active bool
 	signal *models.Signal
 	tz     *time.Location
 }
 
-func NewDax() *Dax {
-	rv := &Dax{
+func NewNasdaq() *Nasdaq {
+	rv := &Nasdaq{
 		MarketContext: NewMarketContext(time.Minute * 5),
 	}
 	rv.onNewBarCb = rv.On5MinBar

@@ -198,7 +198,7 @@ func (t *MarketContext) UpdatePosition(trade *models.Trade, stop, target float64
 	t.exchange.UpdatePosition(trade.Id, stop, target)
 }
 
-func (t *MarketContext) Common5MinBarHandler(bar *models.Bar) {
+func (t *MarketContext) CommonBarHandler(bar *models.Bar) {
 
 	for _, position := range t.positions {
 		position.CheckLoser(bar)
@@ -265,6 +265,23 @@ func (t *MarketContext) SaveData(dir string, location *time.Location) {
 func (t *MarketContext) Now() time.Time {
 	// TODO: if !prod { ...
 	return t.now
+}
+
+func (t *MarketContext) CloseAll() {
+	// don't go over closing time
+	if len(t.orders) > 0 {
+		for id := range t.orders {
+			t.exchange.CancelOrder(id)
+		}
+		t.orders = make(map[int]*models.Trade)
+	}
+	if len(t.positions) > 0 {
+		for id, trade := range t.positions {
+			trade.Position = t.exchange.ExitPosition(id)
+			trade.ExitReason = models.ExitReasonMarketClose
+		}
+		t.positions = make(map[int]*models.Trade)
+	}
 }
 
 func NewMarketContext(barDuration time.Duration) *MarketContext {

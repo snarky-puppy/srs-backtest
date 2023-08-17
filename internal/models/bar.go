@@ -86,6 +86,10 @@ func (b *Bar) EndTime() time.Time {
 	return b.Timestamp.Add(b.Duration)
 }
 
+func (b *Bar) Bullish() bool {
+	return b.Close > b.Open
+}
+
 func NewBar(duration time.Duration) *Bar {
 	return &Bar{Duration: duration}
 }

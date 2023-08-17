@@ -25,6 +25,13 @@ type Platform struct {
 	tradeManager TradeManager
 }
 
+func formatPrice(price float64) string {
+	if price == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%.4f", price)
+}
+
 func (p *Platform) GetPopularMarkets() MarketGroup {
 	//TODO implement me
 	panic("implement me")
@@ -57,8 +64,63 @@ func (p *Platform) GetPopularQuotes() []MarketQuote {
 }
 
 func (p *Platform) CreateOrder(symbol models.Symbol, direction models.Direction, size, open, stop, target float64) *models.Position {
-	//TODO implement me
-	panic("implement me")
+
+	var (
+		orderModeID int
+	)
+	switch {
+	case stop != 0 && target != 0:
+		orderModeID = 3
+	case stop != 0:
+		orderModeID = 2
+	case target != 0:
+		orderModeID = 1
+	default:
+		orderModeID = 0
+	}
+
+	req := InsertOpenOrderRequest{
+		TradeType:          1, // ? - hard coded
+		MarketID:           symbol.MarketID,
+		MarketQuoteID:      symbol.QuoteID,
+		TradeModeID:        direction == models.Short,
+		OrderStake:         fmt.Sprintf("%0.2f", size),
+		OrderModeID:        orderModeID,
+		OrderTypeID:        1, // good till cancelled
+		OrderPriceModeID:   2, // 1 - at market, 2 - at quote
+		LimitOrderPrice:    formatPrice(target),
+		StopOrderPrice:     formatPrice(stop),
+		HasIfDoneOrder:     stop != 0 || target != 0,
+		IDOIsGuarantee:     false,
+		IDOOrderModeID:     orderModeID,
+		IDOLimitOrderPrice: formatPrice(target),
+		IDOStopOrderPrice:  formatPrice(stop),
+	}
+
+	res, err := p.Post(p.account.TradeUrl("/UTSAPI.asmx/InsertOpenOrder"), req)
+	if err != nil {
+		log.Println("Failed to create order:", err)
+		return nil
+	}
+	defer internal.Close(res.Body)
+
+	var resp InsertOpenOrderResponse
+	err = json.NewDecoder(res.Body).Decode(&resp)
+	if err != nil {
+		log.Println("Failed to parse InsertOpenOrderResponse:", err)
+		return nil
+	}
+
+	return &models.Position{
+		Id:          internal.MustInt(resp.D.OrderID),
+		Symbol:      symbol,
+		Status:      models.Order,
+		Direction:   direction,
+		Size:        size,
+		OpenPrice:   open,
+		StopPrice:   stop,
+		TargetPrice: target,
+	}
 }
 
 func (p *Platform) ExitPosition(id int) *models.Position {
