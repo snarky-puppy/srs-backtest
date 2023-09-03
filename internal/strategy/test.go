@@ -52,7 +52,7 @@ func (r *Test) On1MinBar() {
 		return
 	}
 
-	r.MarketContext.CloseAll()
+	r.MarketContext.CloseAll("")
 
 	if !r.IsOpen(bar.Timestamp) {
 		r.signal = nil
@@ -93,7 +93,7 @@ func (r *Test) On1MinBar() {
 }
 
 func (r *Test) OnTick(tick *models.Tick) {
-	r.DefaultOnTick(tick)
+	r.AggregateTick(tick)
 }
 
 func (r *Test) Symbol() models.Symbol {

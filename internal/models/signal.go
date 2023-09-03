@@ -1,14 +1,7 @@
 package models
 
 import (
-	"math"
 	"time"
-)
-
-const (
-	TargetPoints = 200
-	MaxStopPts   = 50
-	MinStopPts   = 20
 )
 
 type Signal struct {
@@ -51,45 +44,6 @@ func (s *Signal) EncodeableClone() *Signal {
 		Bar:    s.Bar.Copy(),
 		Trades: newTrades,
 	}
-}
-
-func (s *Signal) EST(direction Direction) (entry, stop, target float64) {
-	switch direction {
-	case Long:
-		entry = s.High() + 3
-		target = entry + TargetPoints
-
-		if s.TryMaxStop {
-			stop = math.Max(s.Bar.Low, entry-MaxStopPts)
-		} else {
-			stopPts := s.Bar.High - s.Bar.Low
-			if stopPts > MaxStopPts {
-				stop = s.Bar.High - MaxStopPts
-			} else if stop < MinStopPts {
-				stop = s.Bar.High - MinStopPts
-			} else {
-				stop = s.Bar.Low
-			}
-		}
-	case Short:
-		entry = s.Low() - 3
-		target = entry - TargetPoints
-
-		if s.TryMaxStop {
-			stop = math.Min(s.Bar.High, entry+MaxStopPts)
-			break
-		} else {
-			stopPts := s.Bar.High - s.Bar.Low
-			if stopPts > MaxStopPts {
-				stop = s.Bar.Low + MaxStopPts
-			} else if stop < MinStopPts {
-				stop = s.Bar.Low + MinStopPts
-			} else {
-				stop = s.Bar.High
-			}
-		}
-	}
-	return
 }
 
 func (s *Signal) AddPosition(trade *Trade) {

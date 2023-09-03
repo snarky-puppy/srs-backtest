@@ -44,9 +44,9 @@ func (s *Simulator) UpdatePosition(id int, stop, target float64) {
 	trade.TargetPrice = target
 }
 
-func (s *Simulator) ExitPosition(id int) *models.Position {
+func (s *Simulator) ExitPosition(id int, tick *models.Tick) *models.Position {
 	trade := s.positions[id]
-	s.closePosition(trade, s.currentTick)
+	s.closePosition(trade, s.currentTick, false)
 	return trade
 }
 
@@ -87,18 +87,18 @@ func (s *Simulator) addTick(tick *models.Tick) {
 	for _, trade := range s.positions {
 		switch trade.Direction {
 		case models.Long:
-			currentPrice := tick.Buy
+			currentPrice := tick.Bid
 			if trade.StopPrice != 0 && currentPrice <= trade.StopPrice {
-				s.closePosition(trade, tick)
+				s.closePosition(trade, tick, true)
 			} else if trade.TargetPrice != 0 && currentPrice >= trade.TargetPrice {
-				s.closePosition(trade, tick)
+				s.closePosition(trade, tick, true)
 			}
 		case models.Short:
-			currentPrice := tick.Sell
+			currentPrice := tick.Ask
 			if trade.StopPrice != 0 && currentPrice >= trade.StopPrice {
-				s.closePosition(trade, tick)
+				s.closePosition(trade, tick, true)
 			} else if trade.TargetPrice != 0 && currentPrice <= trade.TargetPrice {
-				s.closePosition(trade, tick)
+				s.closePosition(trade, tick, true)
 			}
 		}
 	}
@@ -107,11 +107,11 @@ func (s *Simulator) addTick(tick *models.Tick) {
 	for _, trade := range s.orders {
 		switch trade.Direction {
 		case models.Long:
-			if tick.Buy >= trade.OpenPrice {
+			if tick.Bid >= trade.OpenPrice {
 				s.enterPosition(trade, tick)
 			}
 		case models.Short:
-			if tick.Sell <= trade.OpenPrice {
+			if tick.Ask <= trade.OpenPrice {
 				s.enterPosition(trade, tick)
 			}
 		}
@@ -124,7 +124,6 @@ func (s *Simulator) CreateOrder(symbol models.Symbol, direction models.Direction
 		Id:          s.tradeId,
 		Symbol:      symbol,
 		Size:        size,
-		Status:      models.Order,
 		Direction:   direction,
 		OpenPrice:   open,
 		OpenTime:    s.currentTick.Timestamp,
@@ -138,20 +137,20 @@ func (s *Simulator) CreateOrder(symbol models.Symbol, direction models.Direction
 func (s *Simulator) enterPosition(trade *models.Position, tick *models.Tick) {
 	trade.EntryTime = tick.Timestamp
 	trade.EntryPrice = tick.DirectionPrice(trade.Direction)
-	trade.Status = models.Active
 	delete(s.orders, trade.Id)
 	s.positions[trade.Id] = trade
 	s.ctxMngr.PositionOpened(trade)
 }
 
-func (s *Simulator) closePosition(trade *models.Position, tick *models.Tick) {
+func (s *Simulator) closePosition(trade *models.Position, tick *models.Tick, cb bool) {
 	s.balance = closeTrade(trade, tick, s.balance)
 	delete(s.positions, trade.Id)
-	s.ctxMngr.PositionClosed(trade)
+	if cb {
+		s.ctxMngr.PositionClosed(trade)
+	}
 }
 
 func closeTrade(t *models.Position, tick *models.Tick, balance float64) (newBalance float64) {
-	t.Status = models.Closed
 	t.ExitTime = tick.Timestamp
 	t.ExitPrice = tick.MidPrice()
 	t.PointsProfit = models.CalculatePointsProfit(t, t.ExitPrice)

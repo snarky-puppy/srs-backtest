@@ -100,7 +100,7 @@ func (t *TickReader) Next() (*models.Tick, error) {
 		return nil, err
 	}
 
-	return &models.Tick{Symbol: t.symbol, Timestamp: timestamp.UTC(), Buy: buy, Sell: sell}, nil
+	return &models.Tick{Symbol: t.symbol, Timestamp: timestamp.UTC(), Bid: buy, Ask: sell}, nil
 }
 
 // Close closes the CSV file

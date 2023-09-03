@@ -17,6 +17,7 @@ import (
 )
 
 const UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/113.0"
+const UserAgentShort = "(Firefox/113.0)"
 
 // UserAgentTransport is custom Transport that adds the User-Agent header to each request.
 type UserAgentTransport struct {

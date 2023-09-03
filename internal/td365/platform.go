@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -23,6 +24,8 @@ type Platform struct {
 	uat          *UserAgentTransport
 	connection   *ConnectionProxy
 	tradeManager TradeManager
+	positions    map[int]*models.Position
+	orders       map[int]*models.Position
 }
 
 func formatPrice(price float64) string {
@@ -63,7 +66,7 @@ func (p *Platform) GetPopularQuotes() []MarketQuote {
 	return quotes.D
 }
 
-func (p *Platform) CreateOrder(symbol models.Symbol, direction models.Direction, size, open, stop, target float64) *models.Position {
+func (p *Platform) CreateOrder(symbol models.Symbol, direction models.Direction, size, open, stop, target float64) *models.Order {
 
 	var (
 		orderModeID int
@@ -111,31 +114,107 @@ func (p *Platform) CreateOrder(symbol models.Symbol, direction models.Direction,
 		return nil
 	}
 
-	return &models.Position{
+	order := &models.Order{
 		Id:          internal.MustInt(resp.D.OrderID),
 		Symbol:      symbol,
-		Status:      models.Order,
 		Direction:   direction,
 		Size:        size,
 		OpenPrice:   open,
 		StopPrice:   stop,
 		TargetPrice: target,
 	}
+
+	return order
 }
 
-func (p *Platform) ExitPosition(id int) *models.Position {
-	//TODO implement me
-	panic("implement me")
+func (p *Platform) ExitPosition(id int, tick *models.Tick) *models.Position {
+
+	position := p.positions[id]
+	if position == nil {
+		fmt.Println("ExitPosition: position not found", id)
+		debug.PrintStack()
+	}
+
+	price := tick.Bid
+	tradeMode := false
+	if position.Direction == models.Short {
+		price = tick.Ask
+		tradeMode = true
+	}
+
+	req := InsertClosePositionRequest{
+		IsKaazingFeed: true,
+		Key:           tick.Key,
+		MarketID:      position.Symbol.MarketID,
+		PositionID:    position.Id,
+		Price:         formatPrice(price),
+		QuoteID:       position.Symbol.QuoteID,
+		Stake:         formatPrice(position.Size),
+		TradeMode:     tradeMode,
+		UserAgent:     UserAgentShort,
+	}
+
+	res, err := p.Post(p.account.TradeUrl("/UTSAPI.asmx/InsertClosePosition"), req)
+	if err != nil {
+		log.Println("Failed to close position:", err)
+		return nil
+	}
+	defer internal.Close(res.Body)
+
+	var resp InsertClosePositionResponse
+	err = json.NewDecoder(res.Body).Decode(&resp)
+	if err != nil {
+		log.Println("Failed to parse InsertClosePositionResponse:", err)
+		return nil
+	}
+
+	position.ExitTime = time.Now()
+	position.ExitPrice = resp.D.Price
+
+	log.Println("Closed position", position.Id, "at", position.ExitPrice)
+
+	delete(p.positions, id)
+
+	return position
 }
 
 func (p *Platform) CancelOrder(id int) {
-	//TODO implement me
-	panic("implement me")
+	req := DeleteOrderRequest{
+		OrderID: id,
+	}
+
+	res, err := p.Post(p.account.TradeUrl("/UTSAPI.asmx/DeleteOrder"), req)
+	if err != nil {
+		log.Println("Failed to close order:", err)
+		return
+	}
+	defer internal.Close(res.Body)
+
+	delete(p.orders, id)
 }
 
+/**
+OpenOrder - order to open position
+CloseOrder - order to close position
+
+AmendCloseOrder - position has order id
+AmendOpenOrder - order not filled
+    - stopOrderPrice - open price
+	- IDOStopOrderPrice - stop price
+*/
+
 func (p *Platform) UpdatePosition(id int, stop, target float64) {
-	//TODO implement me
-	panic("implement me")
+	position := p.positions[id]
+	if position == nil {
+		fmt.Println("UpdatePosition: position not found", id)
+		debug.PrintStack()
+		return
+	}
+
+	//req := AmendCloseOrderRequest{
+	//	Market:  position.Symbol.MarketName,
+	//	OrderID: position.Id,
+	//}
 }
 
 func (p *Platform) GetBalance() float64 {

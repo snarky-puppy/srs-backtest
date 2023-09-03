@@ -2,12 +2,19 @@ package models
 
 import (
 	"math"
+	"sort"
+	"time"
 )
+
+type SmaHistory struct {
+	Value     float64
+	Timestamp time.Time
+}
 
 type SMA struct {
 	Period  int
 	Values  []float64
-	History []float64
+	History []SmaHistory
 }
 
 func (s *SMA) AddBar(bar *Bar) {
@@ -20,12 +27,10 @@ func (s *SMA) AddBar(bar *Bar) {
 
 	// calculate and add the current SMA value to the history
 	smaValue := s.Calculate()
-	s.History = append(s.History, smaValue)
-
-	// If the length of history is larger than the period, remove the oldest value.
-	if len(s.History) > 100 {
-		s.History = s.History[1:]
-	}
+	s.History = append(s.History, SmaHistory{
+		Value:     smaValue,
+		Timestamp: bar.Timestamp,
+	})
 }
 
 func (s *SMA) Calculate() float64 {
@@ -53,7 +58,7 @@ func (s *SMA) GetAngle(n int) float64 {
 	}
 
 	// Calculate the difference in SMA values and time (assuming time steps of 1)
-	yDiff := s.History[len(s.History)-1] - s.History[startIndex]
+	yDiff := s.History[len(s.History)-1].Value - s.History[startIndex].Value
 	xDiff := float64(len(s.History) - 1 - startIndex)
 
 	// Calculate the angle in radians
@@ -75,7 +80,7 @@ func (s *SMA) CrossedOver(sma *SMA, n int) bool {
 	smaLastN := sma.History[len(sma.History)-n:]
 
 	// if s was initially below sma, and is now above, return true
-	if sLastN[0] < smaLastN[0] && sLastN[n-1] > smaLastN[n-1] {
+	if sLastN[0].Value < smaLastN[0].Value && sLastN[n-1].Value > smaLastN[n-1].Value {
 		return true
 	}
 
@@ -92,9 +97,22 @@ func (s *SMA) CrossedUnder(sma *SMA, n int) bool {
 	smaLastN := sma.History[len(sma.History)-n:]
 
 	// if s was initially above sma, and is now below, return true
-	if sLastN[0] > smaLastN[0] && sLastN[n-1] < smaLastN[n-1] {
+	if sLastN[0].Value > smaLastN[0].Value && sLastN[n-1].Value < smaLastN[n-1].Value {
 		return true
 	}
 
 	return false
+}
+
+func (s *SMA) FilterDay(day time.Time, location *time.Location) (rv []SmaHistory) {
+	for _, bar := range s.History {
+		t := bar.Timestamp.In(location)
+		if t.Year() == day.Year() && t.Month() == day.Month() && t.Day() == day.Day() {
+			rv = append(rv, bar)
+		}
+	}
+	sort.Slice(rv, func(i, j int) bool {
+		return rv[i].Timestamp.Before(rv[j].Timestamp)
+	})
+	return rv
 }

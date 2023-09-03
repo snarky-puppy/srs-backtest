@@ -1,6 +1,7 @@
 package models
 
 type Symbol struct {
-	QuoteID  int
-	MarketID int
+	QuoteID    int
+	MarketID   int
+	MarketName string
 }

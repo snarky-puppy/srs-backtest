@@ -17,6 +17,7 @@ const (
 type MarketContext struct {
 	exchange           models.Exchange
 	aggregator         *models.BarAggregator
+	lastTick           *models.Tick
 	orders             map[int]*models.Trade
 	positions          map[int]*models.Trade
 	history            *models.History
@@ -48,7 +49,7 @@ func (t *MarketContext) PositionOpened(exTrade *models.Position) {
 	trade := t.orders[exTrade.Id]
 	if trade == nil {
 		log.Printf("order not found: %+v", exTrade)
-		t.exchange.ExitPosition(exTrade.Id)
+		t.ExitPosition(exTrade.Id)
 		return
 	}
 	trade.StopLog = append(trade.StopLog, &models.StopLog{
@@ -68,7 +69,8 @@ func (t *MarketContext) PositionOpened(exTrade *models.Position) {
 	}
 }
 
-func (t *MarketContext) DefaultOnTick(tick *models.Tick) {
+func (t *MarketContext) AggregateTick(tick *models.Tick) *models.Bar {
+	t.lastTick = tick
 	bar := t.aggregator.AddTick(tick)
 
 	if tick != nil {
@@ -77,9 +79,8 @@ func (t *MarketContext) DefaultOnTick(tick *models.Tick) {
 
 	if bar != nil {
 		t.history.AddBar(bar)
-		t.onNewBarCb()
 	}
-	t.managePositions(tick)
+	return bar
 }
 
 func (t *MarketContext) SetExchange(exchange models.Exchange) {
@@ -100,12 +101,9 @@ func (t *MarketContext) CreateOrder(symbol models.Symbol, signal *models.Signal,
 	size := t.calculateTradeSize(stopPts)
 	exTrade := t.exchange.CreateOrder(symbol, direction, size, open, stop, target)
 	trade := &models.Trade{
-		Position:         exTrade,
-		OpenReason:       reason,
-		AutoAdjustStop:   true,
-		LoserThreshold:   15,
-		CanAddToPosition: true,
-		TrailStopPoints:  stopPts,
+		Position:        exTrade,
+		OpenReason:      reason,
+		TrailStopPoints: stopPts,
 	}
 	t.orders[trade.Id] = trade
 	trade.Signal = signal
@@ -114,71 +112,6 @@ func (t *MarketContext) CreateOrder(symbol models.Symbol, signal *models.Signal,
 
 func (t *MarketContext) PrintReport() {
 	t.history.PrintReport()
-}
-
-func (t *MarketContext) managePositions(tick *models.Tick) {
-	for _, trade := range t.positions {
-		t.managePosition(tick, trade)
-	}
-}
-
-func (t *MarketContext) considerAddingToPosition(bar *models.Bar, winner *models.Trade) {
-
-	if winner.EntryTime.Truncate(bar.Duration).Equal(bar.Timestamp) {
-		return
-	}
-
-	if models.CalculatePointsProfit(winner.Position, bar.AvgPrice()) < AddToPositionPoints {
-		return
-	}
-
-	// crude velocity check
-	switch winner.Direction {
-	case models.Long:
-		if t.history.Sma5.Calculate()-t.history.Sma25.Calculate() < AddToTradeVelocityThreshold {
-			return
-		}
-	case models.Short:
-		if t.history.Sma25.Calculate()-t.history.Sma5.Calculate() < AddToTradeVelocityThreshold {
-			return
-		}
-	}
-
-	winner.CanAddToPosition = false // a trade can only be added to once
-
-	// if we are long, add an order at the bottom of the previous bar low
-	// if we are short, add an order at the top of the previous bar high
-
-	open := bar.Open
-	switch winner.Direction {
-	case models.Long:
-		open = bar.Low
-	case models.Short:
-		open = bar.High
-	}
-
-	newTrade := t.CreateOrder(winner.Symbol, winner.Signal, models.OpenReasonAddToPosition, winner.Direction, open, winner.StopPrice, 0)
-	newTrade.IsAdditional = true
-	//newTrade.BTL = 5
-}
-
-func (t *MarketContext) managePosition(tick *models.Tick, trade *models.Trade) {
-
-	tickPrice := tick.MidPrice()
-
-	if trade.AutoAdjustStop {
-		switch trade.Direction {
-		case models.Long:
-			// trail by 30 pts
-			if (tickPrice - trade.TrailStopPoints) > trade.StopPrice {
-				t.UpdatePosition(trade, tickPrice-trade.TrailStopPoints, 0)
-			}
-		case models.Short:
-			if (tickPrice + trade.TrailStopPoints) < trade.StopPrice {
-				t.UpdatePosition(trade, tickPrice+trade.TrailStopPoints, 0)
-			}
-		}
-	}
 }
 
 func (t *MarketContext) UpdatePosition(trade *models.Trade, stop, target float64) {
@@ -198,60 +131,6 @@ func (t *MarketContext) UpdatePosition(trade *models.Trade, stop, target float64
 	t.exchange.UpdatePosition(trade.Id, stop, target)
 }
 
-func (t *MarketContext) CommonBarHandler(bar *models.Bar) {
-
-	for _, position := range t.positions {
-		position.CheckLoser(bar)
-		if position.IsLoser() {
-			// try to close for beak-even
-			switch position.Direction {
-			case models.Long:
-				t.exchange.UpdatePosition(position.Id, math.Max(position.StopPrice, bar.Low+3), position.OpenPrice)
-			case models.Short:
-				t.exchange.UpdatePosition(position.Id, math.Min(position.StopPrice, bar.High+3), position.OpenPrice)
-			}
-			continue
-		}
-
-		// if we are long, and the 25 SMA crosses below the 5 SMA, exit the position
-		if position.Signal.EnableSmaExit {
-			if position.Direction == models.Long {
-				if t.history.Sma25.CrossedOver(t.history.Sma5, 2) {
-					if models.CalculatePointsProfit(position.Position, bar.Close) <= 0 {
-						// if not in profit, tighten the stop and try to close for break even
-						stop := t.history.FindAverageLow(5)
-						position.ExitReason = models.ExitReasonSmaCrossStop
-						t.UpdatePosition(position, stop, position.EntryPrice)
-					} else {
-						// otherwise, just close for profit
-						position.ExitReason = models.ExitReasonSmaCross
-						t.exchange.ExitPosition(position.Id)
-					}
-					continue
-				}
-			} else {
-				if t.history.Sma5.CrossedOver(t.history.Sma25, 2) {
-					if models.CalculatePointsProfit(position.Position, bar.Close) <= 0 {
-						// if not in profit, tighten the stop and try to close for break even
-						stop := t.history.FindAverageHigh(5)
-						position.ExitReason = models.ExitReasonSmaCrossStop
-						t.UpdatePosition(position, stop, position.EntryPrice)
-					} else {
-						// otherwise, just close for profit
-						position.ExitReason = models.ExitReasonSmaCross
-						t.exchange.ExitPosition(position.Id)
-					}
-					continue
-				}
-			}
-		}
-
-		if position.CanAddToPosition {
-			t.considerAddingToPosition(bar, position)
-		}
-	}
-}
-
 func (t *MarketContext) Backfill(bars models.Series) {
 	for _, bar := range bars {
 		t.history.AddBar(bar)
@@ -267,18 +146,29 @@ func (t *MarketContext) Now() time.Time {
 	return t.now
 }
 
-func (t *MarketContext) CloseAll() {
-	// don't go over closing time
+func (t *MarketContext) CloseAll(reason models.ExitReason) {
+	t.CloseAllOrders()
+	t.CloseAllPositions(reason)
+}
+
+func (t *MarketContext) ExitPosition(id int) *models.Position {
+	return t.exchange.ExitPosition(id, t.lastTick)
+}
+
+func (t *MarketContext) CloseAllOrders() {
 	if len(t.orders) > 0 {
 		for id := range t.orders {
 			t.exchange.CancelOrder(id)
 		}
 		t.orders = make(map[int]*models.Trade)
 	}
+}
+
+func (t *MarketContext) CloseAllPositions(reason models.ExitReason) {
 	if len(t.positions) > 0 {
 		for id, trade := range t.positions {
-			trade.Position = t.exchange.ExitPosition(id)
-			trade.ExitReason = models.ExitReasonMarketClose
+			trade.Position = t.ExitPosition(id)
+			trade.ExitReason = reason
 		}
 		t.positions = make(map[int]*models.Trade)
 	}

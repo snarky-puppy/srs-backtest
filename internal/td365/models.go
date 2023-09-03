@@ -56,7 +56,7 @@ accountDetails:
           "CurrencySymbol": "DMD",
           "Type": "1",
           "MarketName": "Germany 40 - Rolling Cash",
-          "Direction": "Sell",
+          "Direction": "Ask",
           "ExpiryDateTime": "30/12/31",
           "CreationTime": "08/08/23 01:10:18",
           "CreationTimeUTC": "2023-08-08T00:10:18.6903102Z",
@@ -698,7 +698,7 @@ type DeleteOrderResponse struct {
   "IDOStopOrderPrice": "15990.0"
 }
 */
-type AmmendOpenOrderRequest struct {
+type AmendOpenOrderRequest struct {
 	OrderID            int    `json:"orderID"`
 	OrderStake         string `json:"orderStake"`
 	OrderModeID        int    `json:"orderModeID"`
@@ -1005,7 +1005,7 @@ type InsertClosePositionRequest struct {
 	PositionID    int    `json:"positionID"`
 	QuoteID       int    `json:"quoteID"`
 	Price         string `json:"price"`
-	Stake         int    `json:"stake"`
+	Stake         string `json:"stake"`
 	TradeMode     bool   `json:"tradeMode"`
 	IsKaazingFeed bool   `json:"isKaazingFeed"`
 	UserAgent     string `json:"userAgent"`
@@ -1073,4 +1073,17 @@ type InsertClosePositionResponse struct {
 		Status          int         `json:"Status"`
 		Message         interface{} `json:"Message"`
 	} `json:"d"`
+}
+
+type AmendCloseOrderRequest struct {
+	Market           string `json:"market"`
+	OrderID          int    `json:"orderID"`
+	OrderStake       string `json:"orderStake"`
+	OrderModeID      int    `json:"orderModeID"`
+	OrderTypeID      int    `json:"orderTypeID"`
+	OrderPriceModeID int    `json:"orderPriceModeID"`
+	LimitOrderPrice  int    `json:"limitOrderPrice"`
+	StopOrderPrice   string `json:"stopOrderPrice"`
+	TrailingPoint    int    `json:"trailingPoint"`
+	IsGuaranteed     bool   `json:"isGuaranteed"`
 }

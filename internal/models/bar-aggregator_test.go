@@ -18,10 +18,10 @@ func TestProcessTick(t *testing.T) {
 
 	// Mock ticks
 	ticks := []*Tick{
-		{Timestamp: time.Date(2023, 7, 13, 10, 0, 0, 0, time.UTC), Buy: 100, Sell: 105}, // 102.5
-		{Timestamp: time.Date(2023, 7, 13, 10, 3, 0, 0, time.UTC), Buy: 101, Sell: 106}, // 103.5
-		{Timestamp: time.Date(2023, 7, 13, 10, 5, 0, 0, time.UTC), Buy: 102, Sell: 107}, // 104.5
-		//{Timestamp: time.Date(2023, 7, 13, 10, 6, 0, 0, time.UTC), Buy: 102, Sell: 107},
+		{Timestamp: time.Date(2023, 7, 13, 10, 0, 0, 0, time.UTC), Bid: 100, Ask: 105}, // 102.5
+		{Timestamp: time.Date(2023, 7, 13, 10, 3, 0, 0, time.UTC), Bid: 101, Ask: 106}, // 103.5
+		{Timestamp: time.Date(2023, 7, 13, 10, 5, 0, 0, time.UTC), Bid: 102, Ask: 107}, // 104.5
+		//{Timestamp: time.Date(2023, 7, 13, 10, 6, 0, 0, time.UTC), Bid: 102, Ask: 107},
 	}
 
 	var bars []*Bar

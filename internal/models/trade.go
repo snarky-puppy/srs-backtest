@@ -23,6 +23,7 @@ const (
 	ExitReasonMarketClose  ExitReason = "marketclose"
 	ExitReasonSmaCross     ExitReason = "sma"
 	ExitReasonSmaCrossStop ExitReason = "smastop"
+	ExitReasonLoser        ExitReason = "loser"
 )
 
 // StopLog tracks stop adjustments
@@ -34,18 +35,18 @@ type StopLog struct {
 type Trade struct {
 	*Position
 
-	StopLog           []*StopLog
-	OpenReason        OpenReason
-	ExitReason        ExitReason
-	Loser             float64 // the Loser score
-	DisableLoserCheck bool    // disable the Loser score (for add-on trades)
-	Signal            *Signal // the originating signal
-	AutoAdjustStop    bool    // if true, trade management will automatically update this trade's stop
-	CanAddToPosition  bool
-	IsAdditional      bool
-	TrailStopPoints   float64
-	LoserThreshold    float64
-	BTL               int // Bars To Live (close when BTL == 0)
+	StopLog          []*StopLog
+	OpenReason       OpenReason
+	ExitReason       ExitReason
+	Loser            float64 // the Loser score
+	EnableLoserCheck bool    // disable the Loser score (for add-on trades)
+	Signal           *Signal // the originating signal
+	AutoAdjustStop   bool    // if true, trade management will automatically update this trade's stop
+	CanAddToPosition bool
+	IsAdditional     bool
+	TrailStopPoints  float64
+	LoserThreshold   float64
+	BTL              int // Bars To Live (close when BTL == 0)
 }
 
 func (t *Trade) UpdateClosed(exTrade *Position) {
@@ -101,7 +102,7 @@ func (t *Trade) CheckLoser(bar *Bar) {
 		  ** RESET score when 5 min bar clears the trigger (long: low > trigger, short: high < trigger)
 	*/
 
-	if t.DisableLoserCheck {
+	if !t.EnableLoserCheck {
 		return
 	}
 
@@ -136,6 +137,9 @@ func (t *Trade) UpdateLoserScore(l float64) {
 }
 
 func (t *Trade) IsLoser() bool {
+	if !t.EnableLoserCheck {
+		return false
+	}
 	return t.Loser >= t.LoserThreshold
 }
 

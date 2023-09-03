@@ -19,6 +19,9 @@ type HistoricalRecord struct {
 	Signal   *Signal
 	Context  Series
 	Timezone string
+	Sma5     []SmaHistory
+	Sma25    []SmaHistory
+	Sma50    []SmaHistory
 }
 
 func (r *HistoricalRecord) Localise() {
@@ -222,6 +225,9 @@ func (h *History) saveSignalData(signal *Signal, fileName string, location *time
 		Signal:   signal.EncodeableClone(),
 		Context:  h.bars.FilterDay(signal.Bar.Timestamp, location),
 		Timezone: location.String(),
+		Sma5:     h.Sma5.FilterDay(signal.Bar.Timestamp, location),
+		Sma25:    h.Sma25.FilterDay(signal.Bar.Timestamp, location),
+		Sma50:    h.Sma50.FilterDay(signal.Bar.Timestamp, location),
 	}
 
 	err = enc.Encode(body)

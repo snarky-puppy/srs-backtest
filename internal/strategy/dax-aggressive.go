@@ -8,27 +8,27 @@ import (
 	"github.com/mwlazlo/srs/internal/models"
 )
 
-func (d *DaxExit) Location() *time.Location {
+func (d *DaxAggro) Location() *time.Location {
 	return d.Timezone()
 }
 
-func (d *DaxExit) IsOpen(t time.Time) bool {
+func (d *DaxAggro) IsOpen(t time.Time) bool {
 	t = t.In(d.Timezone())
 	return t.After(d.MarketOpen(t)) && t.Before(d.MarketClose(t))
 }
 
-func (d *DaxExit) MarketOpen(t time.Time) time.Time {
+func (d *DaxAggro) MarketOpen(t time.Time) time.Time {
 	t = t.In(d.Timezone())
 	return time.Date(t.Year(), t.Month(), t.Day(), 9, 0, 0, 0, d.Location())
 }
 
 // MarketClose returns the time the market closes on day t
-func (d *DaxExit) MarketClose(t time.Time) time.Time {
+func (d *DaxAggro) MarketClose(t time.Time) time.Time {
 	t = t.In(d.Timezone())
 	return time.Date(t.Year(), t.Month(), t.Day(), 17, 25, 0, 0, d.Location())
 }
 
-func (d *DaxExit) Timezone() *time.Location {
+func (d *DaxAggro) Timezone() *time.Location {
 	if d.tz == nil {
 		var err error
 		d.tz, err = time.LoadLocation("Europe/Berlin")
@@ -39,7 +39,7 @@ func (d *DaxExit) Timezone() *time.Location {
 	return d.tz
 }
 
-func (d *DaxExit) isPeriod(t time.Time) bool {
+func (d *DaxAggro) isPeriod(t time.Time) bool {
 	t = t.In(d.Timezone())
 	if t.Minute() == 25 && t.Hour() == 9 {
 		return true
@@ -47,7 +47,7 @@ func (d *DaxExit) isPeriod(t time.Time) bool {
 	return false
 }
 
-func (d *DaxExit) On5MinBar() {
+func (d *DaxAggro) On5MinBar() {
 	bar := d.history.GetBar(0)
 
 	if bar == nil {
@@ -57,7 +57,7 @@ func (d *DaxExit) On5MinBar() {
 	barTs := bar.Timestamp.In(d.Timezone())
 
 	if !d.IsOpen(bar.Timestamp) {
-		d.CloseAll(models.ExitReasonMarketClose)
+		d.CloseAll("")
 		return
 	}
 
@@ -66,33 +66,14 @@ func (d *DaxExit) On5MinBar() {
 		d.setupSignal(barTs)
 	}
 
-	// if any orders are still open past 12:00, close them
-	if barTs.Hour() >= 12 {
-		d.CloseAllOrders()
-	}
-
 	if d.signal == nil {
 		return
 	}
-
-	/**
-	Strategies:
-
-	if we're close to our open bar:
-		- if price comes down and almost but not quite hits our stop, it's a signal to exit. Try to get break even. Aggressively adjust stop to get out.
-
-	trend of the day:
-		-sma25 and sma50 have not crossed for n bars,
-	            - must be after markets already open for 30 minutes
-				- distance between them is stable - trending
-				- distance is not stable (but still not crossed) -- ?
-	*/
 
 	for _, position := range d.positions {
 		position.CheckLoser(bar)
 		if position.IsLoser() {
 			// try to close for beak-even
-			position.ExitReason = models.ExitReasonLoser
 			switch position.Direction {
 			case models.Long:
 				d.exchange.UpdatePosition(position.Id, math.Max(position.StopPrice, bar.Low+3), position.TargetPrice)
@@ -142,7 +123,7 @@ func (d *DaxExit) On5MinBar() {
 
 }
 
-func (d *DaxExit) tickUpdateStop(tick *models.Tick) {
+func (d *DaxAggro) tickUpdateStop(tick *models.Tick) {
 	for _, trade := range d.positions {
 		tickPrice := tick.MidPrice()
 
@@ -162,7 +143,7 @@ func (d *DaxExit) tickUpdateStop(tick *models.Tick) {
 	}
 }
 
-func (d *DaxExit) considerAddingToPosition(bar *models.Bar, winner *models.Trade) {
+func (d *DaxAggro) considerAddingToPosition(bar *models.Bar, winner *models.Trade) {
 
 	if winner.EntryTime.Truncate(bar.Duration).Equal(bar.Timestamp) {
 		return
@@ -202,15 +183,15 @@ func (d *DaxExit) considerAddingToPosition(bar *models.Bar, winner *models.Trade
 	//newTrade.BTL = 5
 }
 
-func (d *DaxExit) OnTick(tick *models.Tick) {
+func (d *DaxAggro) OnTick(tick *models.Tick) {
 	bar := d.AggregateTick(tick)
-	if bar != nil {
+	if bar == nil {
 		d.On5MinBar()
 	}
 	d.tickUpdateStop(tick)
 }
 
-func (d *DaxExit) Symbol() models.Symbol {
+func (d *DaxAggro) Symbol() models.Symbol {
 	return models.Symbol{
 		MarketID:   17068,
 		QuoteID:    6374,
@@ -218,7 +199,7 @@ func (d *DaxExit) Symbol() models.Symbol {
 	}
 }
 
-func (d *DaxExit) setupSignal(tm time.Time) {
+func (d *DaxAggro) setupSignal(tm time.Time) {
 	// take last 3 elements from d.bars
 	const historySize = 3
 	setupBars := d.history.GetBars(historySize)
@@ -255,7 +236,7 @@ func (d *DaxExit) setupSignal(tm time.Time) {
 	d.AddSignal(d.signal)
 
 	createOrder := func(direction models.Direction) {
-		entry, stop, target := d.EST(direction)
+		entry, stop, _ := d.EST(direction)
 		o := d.CreateOrder(
 			d.Symbol(),
 			d.signal,
@@ -263,9 +244,10 @@ func (d *DaxExit) setupSignal(tm time.Time) {
 			direction,
 			entry,
 			stop,
-			target)
-		o.EnableLoserCheck = true
-		o.LoserThreshold = 30
+			0)
+		o.AutoAdjustStop = true
+		o.LoserThreshold = 15
+		o.CanAddToPosition = true
 	}
 
 	// add 2 trades
@@ -273,10 +255,10 @@ func (d *DaxExit) setupSignal(tm time.Time) {
 	createOrder(models.Short)
 }
 
-func (d *DaxExit) EST(direction models.Direction) (entry, stop, target float64) {
+func (d *DaxAggro) EST(direction models.Direction) (entry, stop, target float64) {
 	const (
-		TargetPoints = 20
-		MaxStopPts   = 30
+		TargetPoints = 200
+		MaxStopPts   = 50
 		MinStopPts   = 20
 	)
 
@@ -319,15 +301,15 @@ func (d *DaxExit) EST(direction models.Direction) (entry, stop, target float64) 
 	return
 }
 
-type DaxExit struct {
+type DaxAggro struct {
 	*MarketContext
 	active bool
 	signal *models.Signal
 	tz     *time.Location
 }
 
-func NewDaxExit() *DaxExit {
-	rv := &DaxExit{
+func NewDaxAggro() *DaxAggro {
+	rv := &DaxAggro{
 		MarketContext: NewMarketContext(time.Minute * 5),
 	}
 	rv.onNewBarCb = rv.On5MinBar

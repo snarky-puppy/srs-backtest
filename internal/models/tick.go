@@ -9,13 +9,14 @@ import (
 type Tick struct {
 	Symbol    Symbol
 	Timestamp time.Time
-	Buy       float64
-	Sell      float64
+	Bid       float64
+	Ask       float64
+	Key       string
 }
 
-// MidPrice calculates the mid-point price between Buy and Sell.
+// MidPrice calculates the mid-point price between Bid and Ask.
 func (t *Tick) MidPrice() float64 {
-	return internal.Round4((t.Buy + t.Sell) / 2)
+	return internal.Round4((t.Bid + t.Ask) / 2)
 }
 
 func (t *Tick) BaseTime(duration time.Duration) time.Time {
@@ -25,9 +26,9 @@ func (t *Tick) BaseTime(duration time.Duration) time.Time {
 func (t *Tick) DirectionPrice(direction Direction) float64 {
 	switch direction {
 	case Long:
-		return t.Buy
+		return t.Bid
 	case Short:
-		return t.Sell
+		return t.Ask
 	}
 	return 0
 }

@@ -79,22 +79,6 @@
         var xData = [
             {{- range .Series }}"{{ .Timestamp.Format "15:04" }}",{{- end }}
         ];
-    	function calculateMA(dayCount, data) {
-    		var result = [];
-    		for (var i = 0, len = data.length; i < len; i++) {
-    			if (i < dayCount) {
-    				result.push('-');
-    				continue;
-    			}
-    			var sum = 0;
-    			for (var j = 0; j < dayCount; j++) {
-    			    let v = data[i - j];
-    				sum += (v[0] + v[1] + v[2] + v[3])/4;
-    			}
-    			result.push(+(sum / dayCount).toFixed(3));
-    		}
-    		return result;
-    	}
         const fix = (timeStr) => {
           const [hour, minutes] = timeStr.split(":").map(Number);
           const roundedMinutes = Math.floor(minutes / 5) * 5;
@@ -173,7 +157,7 @@
                 {
                   name: 'MA5',
                   type: 'line',
-                  data: calculateMA(5, data),
+                  data: [{{- range .Sma5 }}{{ .}},{{- end }}],
                   smooth: true,
                   showSymbol: false,
                   animation: false,
@@ -185,7 +169,7 @@
                 {
                   name: 'MA25',
                   type: 'line',
-                  data: calculateMA(25, data),
+                  data: [{{- range .Sma25 }}{{ .}},{{- end }}],
                   smooth: true,
                   showSymbol: false,
                   animation: false,
@@ -197,7 +181,7 @@
                 {
                   name: 'MA50',
                   type: 'line',
-                  data: calculateMA(50, data),
+                  data: [{{- range .Sma50 }}{{ .}},{{- end }}],
                   smooth: true,
                   showSymbol: false,
                   animation: false,

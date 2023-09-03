@@ -52,13 +52,12 @@ func (c *ConnectionProxy) StartConnectionLoop() {
 
 	c.Dial()
 	done := c.ReadLoop()
-	log.Println(1)
 	<-c.receiveAuthOK
-	log.Println(2)
+
+	c.SubscribeAccountSummary()
 
 	go func() {
 		for {
-			log.Println(3)
 			select {
 			case <-internal.GetGracefulCtx().Done():
 				return
@@ -103,6 +102,13 @@ func (c *ConnectionProxy) Subscribe(quotes []Subscription) {
 			c.messages = append(c.messages, msg)
 		}
 		c.SendSubscription(msg)
+	}
+}
+
+func (c *ConnectionProxy) SubscribeAccountSummary() {
+	msg := `{"data":"{\"SubscribeToAccountSummary\":true,\"SubscribeToAccountDetails\":true}","action":"options"}`
+	if err := c.conn.WriteJSON(msg); err != nil {
+		log.Println("Error sending account subscription:", err)
 	}
 }
 
