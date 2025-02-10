@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	mngr := exchange.NewContextManager(strategy.NewDaxExit())
+	mngr := exchange.NewContextManager(strategy.NewDaxAggro())
 	sim := exchange.NewExchangeSimulator(mngr)
 	sim.ProcessTicks()
 	mngr.PrintReport()

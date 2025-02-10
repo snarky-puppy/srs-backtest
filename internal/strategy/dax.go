@@ -95,9 +95,9 @@ func (d *DaxExit) On5MinBar() {
 			position.ExitReason = models.ExitReasonLoser
 			switch position.Direction {
 			case models.Long:
-				d.exchange.UpdatePosition(position.Id, math.Max(position.StopPrice, bar.Low+3), position.TargetPrice)
+				d.exchange.UpdatePosition(position.Id, math.Max(position.StopPrice, bar.Low+3), position.OpenPrice)
 			case models.Short:
-				d.exchange.UpdatePosition(position.Id, math.Min(position.StopPrice, bar.High+3), position.TargetPrice)
+				d.exchange.UpdatePosition(position.Id, math.Min(position.StopPrice, bar.High+3), position.OpenPrice)
 			}
 			continue
 		}
@@ -163,6 +163,11 @@ func (d *DaxExit) tickUpdateStop(tick *models.Tick) {
 }
 
 func (d *DaxExit) considerAddingToPosition(bar *models.Bar, winner *models.Trade) {
+
+	const (
+		AddToPositionPoints         = 20
+		AddToTradeVelocityThreshold = 10
+	)
 
 	if winner.EntryTime.Truncate(bar.Duration).Equal(bar.Timestamp) {
 		return

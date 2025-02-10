@@ -9,10 +9,10 @@ import (
 	"github.com/mwlazlo/srs/internal/models"
 )
 
-const (
-	AddToPositionPoints         = 20
-	AddToTradeVelocityThreshold = 10
-)
+//const (
+//	AddToPositionPoints         = 20
+//	AddToTradeVelocityThreshold = 10
+//)
 
 type MarketContext struct {
 	exchange           models.Exchange

@@ -76,9 +76,9 @@ func (d *DaxAggro) On5MinBar() {
 			// try to close for beak-even
 			switch position.Direction {
 			case models.Long:
-				d.exchange.UpdatePosition(position.Id, math.Max(position.StopPrice, bar.Low+3), position.TargetPrice)
+				d.exchange.UpdatePosition(position.Id, math.Max(position.StopPrice, bar.Low+3), position.OpenPrice)
 			case models.Short:
-				d.exchange.UpdatePosition(position.Id, math.Min(position.StopPrice, bar.High+3), position.TargetPrice)
+				d.exchange.UpdatePosition(position.Id, math.Min(position.StopPrice, bar.High+3), position.OpenPrice)
 			}
 			continue
 		}
@@ -145,6 +145,11 @@ func (d *DaxAggro) tickUpdateStop(tick *models.Tick) {
 
 func (d *DaxAggro) considerAddingToPosition(bar *models.Bar, winner *models.Trade) {
 
+	const (
+		AddToPositionPoints         = 20
+		AddToTradeVelocityThreshold = 10
+	)
+
 	if winner.EntryTime.Truncate(bar.Duration).Equal(bar.Timestamp) {
 		return
 	}
@@ -153,7 +158,7 @@ func (d *DaxAggro) considerAddingToPosition(bar *models.Bar, winner *models.Trad
 		return
 	}
 
-	// crude velocity check
+	// crude price action velocity check
 	switch winner.Direction {
 	case models.Long:
 		if d.history.Sma5.Calculate()-d.history.Sma25.Calculate() < AddToTradeVelocityThreshold {
@@ -178,14 +183,19 @@ func (d *DaxAggro) considerAddingToPosition(bar *models.Bar, winner *models.Trad
 		open = bar.High
 	}
 
+	if bar.Timestamp.Format("2006-01-02") == "2023-06-30" {
+		log.Println("adding to position", winner.Direction, open)
+	}
+
 	newTrade := d.CreateOrder(winner.Symbol, winner.Signal, models.OpenReasonAddToPosition, winner.Direction, open, winner.StopPrice, 0)
 	newTrade.IsAdditional = true
+	newTrade.CanAddToPosition = true
 	//newTrade.BTL = 5
 }
 
 func (d *DaxAggro) OnTick(tick *models.Tick) {
 	bar := d.AggregateTick(tick)
-	if bar == nil {
+	if bar != nil {
 		d.On5MinBar()
 	}
 	d.tickUpdateStop(tick)
