@@ -1,6 +1,9 @@
 # srs
 SRS backtest
 
+This repo is a Tom Hougaard's School Run Strategy backtest suite
+
+
 ## PL before "add to trade" 
 e8e0d683c2e5d441e70458354993788e948544a5
 
